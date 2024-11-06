@@ -1,0 +1,62 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Teacher {
+  id       Int     @id @default(autoincrement())
+  firstName     String
+  lastName     String
+  email    String  @unique
+  password String
+  subjects Subject[]
+  sheets   Sheet[]
+}
+
+model Subject {
+  code      String      @id 
+  name      String
+  teacher   Teacher  @relation(fields: [teacherId], references: [id])
+  teacherId Int
+  sheets    Sheet[]
+  CO       CO[]
+}
+
+model Sheet {
+  id                  String       // Part of composite primary key
+  subjectCode         String       // Part of composite primary key
+  name                String
+  subject             Subject       @relation(fields: [subjectCode], references: [code])
+  teacher             Teacher       @relation(fields: [teacherId], references: [id])
+  teacherId           Int
+  MST1_Q1             Int?          // Nullable field
+  MST1_Q2             Int?          // Nullable field
+  MST1_Q3             Int?          // Nullable field
+  MST2_Q1             Int?          // Nullable field
+  MST2_Q2             Int?          // Nullable field
+  MST2_Q3             Int?          // Nullable field
+  Quiz_Assignment     Int?          // Nullable field
+  EndSem_Q1           Int?          // Nullable field
+  EndSem_Q2           Int?          // Nullable field
+  EndSem_Q3           Int?          // Nullable field
+  EndSem_Q4           Int?          // Nullable field
+  EndSem_Q5           Int?          // Nullable field
+  @@id([id, subjectCode]) // Composite primary key
+}
+
+model CO {
+
+  subjectCode String @id 
+  subject             Subject       @relation(fields: [subjectCode], references: [code])
+  MST1_Q1 String
+  MST1_Q2 String
+  MST1_Q3 String
+  MST2_Q1 String
+  MST2_Q2 String
+  MST2_Q3 String
+  Quiz_Assignment String[]
+}
