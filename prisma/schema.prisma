@@ -7,56 +7,252 @@ generator client {
   provider = "prisma-client-js"
 }
 
+enum Role {
+  STUDENT
+  TEACHER
+  ADMIN
+}
+
+enum EnrollmentStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+}
+
+// Users -----------------------------------------------------------------------------------------
+model User {
+  id        Int      @id @default(autoincrement())
+  firstName String   @map("first_name")
+  lastName  String   @map("last_name")
+  email     String   @unique
+  password  String
+  role      Role
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  student   Student?
+  teacher   Teacher?
+  admin     Admin?
+
+  @@map("users")
+}
+
+model Student {
+  id                    Int      @id @default(autoincrement())
+  firstName             String   @map("first_name")
+  lastName              String   @map("last_name")
+
+  // Optional field
+  enrollmentNumber      String?  @map("enrollment_number")
+
+  // Relation fields
+  userId                Int      @unique @map("user_id")
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Many-to-many relation with courses
+  enrollments           Enrollment[]
+  quizResponses         QuizResponse[]
+  responses             AttendanceResponse[]
+  assignmentSubmissions AssignmentSubmission[]
+
+  @@map("students")
+}
+
 model Teacher {
-  id       Int     @id @default(autoincrement())
-  firstName     String
-  lastName     String
-  email    String  @unique
-  password String
-  subjects Subject[]
-  sheets   Sheet[]
+  id        Int      @id @default(autoincrement())
+  firstName String   @map("first_name")
+  lastName  String   @map("last_name")
+  
+  // Relation fields
+  userId    Int      @unique @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  courses   Course[]
+  quizzes   Quiz[]
+  attendance Attendance[]
+
+  @@map("teachers")
 }
 
-model Subject {
-  code      String      @id 
-  name      String
-  teacher   Teacher  @relation(fields: [teacherId], references: [id])
-  teacherId Int
-  sheets    Sheet[]
-  CO       CO[]
+model Admin {
+  id        Int      @id @default(autoincrement())
+  firstName String   @map("first_name")
+  lastName  String   @map("last_name")
+  
+  // Relation fields
+  userId    Int      @unique @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("admins")
 }
 
-model Sheet {
-  id                  String       // Part of composite primary key
-  subjectCode         String       // Part of composite primary key
-  name                String
-  subject             Subject       @relation(fields: [subjectCode], references: [code])
-  teacher             Teacher       @relation(fields: [teacherId], references: [id])
-  teacherId           Int
-  MST1_Q1             Int?          // Nullable field
-  MST1_Q2             Int?          // Nullable field
-  MST1_Q3             Int?          // Nullable field
-  MST2_Q1             Int?          // Nullable field
-  MST2_Q2             Int?          // Nullable field
-  MST2_Q3             Int?          // Nullable field
-  Quiz_Assignment     Int?          // Nullable field
-  EndSem_Q1           Int?          // Nullable field
-  EndSem_Q2           Int?          // Nullable field
-  EndSem_Q3           Int?          // Nullable field
-  EndSem_Q4           Int?          // Nullable field
-  EndSem_Q5           Int?          // Nullable field
-  @@id([id, subjectCode]) // Composite primary key
+// Enrollment (Join Table) -----------------------------------------------------------------------------------------
+model Enrollment {
+  id        Int      @id @default(autoincrement())
+  studentId Int      @map("student_id")
+  courseId  Int      @map("course_id")
+  status    EnrollmentStatus @default(PENDING)
+  enrolledAt DateTime @default(now()) @map("enrolled_at")
+
+  // Relations
+  student   Student  @relation(fields: [studentId], references: [id])
+  course    Course   @relation(fields: [courseId], references: [id])
+
+  @@unique([studentId, courseId])
+  @@map("enrollments")
 }
 
-model CO {
+// Courses -----------------------------------------------------------------------------------------
+model Course {
+  id          Int      @id @default(autoincrement())
+  name        String   
+  courseCode  String   @unique @map("course_code")
+  session     String
+  semester    String
+  
+  // Relation fields
+  teacherId   Int      @map("teacher_id")
+  teacher     Teacher  @relation(fields: [teacherId], references: [id])
+  
+  // Relations
+  enrollments Enrollment[]
+  quizzes     Quiz[]
+  attendance  Attendance[]
+  assignments Assignment[]
 
-  subjectCode String @id 
-  subject             Subject       @relation(fields: [subjectCode], references: [code])
-  MST1_Q1 String
-  MST1_Q2 String
-  MST1_Q3 String
-  MST2_Q1 String
-  MST2_Q2 String
-  MST2_Q3 String
-  Quiz_Assignment String[]
+  @@map("courses")
+}
+
+// Quiz System -----------------------------------------------------------------------------------------
+model Quiz {
+  id            Int            @id @default(autoincrement())
+  quizTitle     String?        @map("quiz_title")
+  isActive      Boolean?       @map("is_active")
+  totalMarks    Float?         @map("total_marks")
+  noOfQuestions Int?           @map("no_of_questions")
+  quizTime      Int?           @map("quiz_time")
+  createdAt     DateTime       @default(now()) @map("created_at")
+  updatedAt     DateTime       @updatedAt @map("updated_at")
+  
+  // Relation fields
+  courseId      Int            @map("course_id")
+  teacherId     Int            @map("teacher_id")
+  course        Course         @relation(fields: [courseId], references: [id])
+  teacher       Teacher        @relation(fields: [teacherId], references: [id])
+  
+  // Quiz related relations
+  questions     QuizQuestion[]
+  responses     QuizResponse[]
+
+  @@map("quizzes")
+}
+
+model QuizQuestion {
+  id                Int      @id @default(autoincrement())
+  questionId        Int      @map("question_id")
+  questionTitle     String?  @map("question_title")
+  questionType      String   @map("question_type")
+  option1           String?  @map("option_1")
+  option2           String?  @map("option_2")
+  option3           String?  @map("option_3")
+  option4           String?  @map("option_4")
+  correctOption     Int?     @map("correct_option")
+  textualQuesMarks  Float?   @map("textual_ques_marks")
+  minChar          Int?     @map("min_char")
+  keywords         String[]
+  
+  // Relation fields
+  quizId          Int      @map("quiz_id")
+  quiz            Quiz     @relation(fields: [quizId], references: [id])
+
+  @@unique([quizId, questionId])
+  @@map("quiz_questions")
+}
+
+model QuizResponse {
+  id                Int      @id @default(autoincrement())
+  studentName       String?  @map("student_name")
+  noOfQuestions     Int?     @map("no_of_questions")
+  questionsAttempted Int?    @map("questions_attempted")
+  totalMarks        Float?   @map("total_marks")
+  marksObtained     Float?   @map("marks_obtained")
+  
+  // Relation fields
+  quizId           Int      @map("quiz_id")
+  studentId        Int      @map("student_id")
+  quiz             Quiz     @relation(fields: [quizId], references: [id])
+  student          Student  @relation(fields: [studentId], references: [id])
+
+  @@map("quiz_responses")
+}
+
+// Attendance System ---------------------------------------------------------------------------
+model Attendance {
+  id            Int       @id @default(autoincrement())
+  attendanceId  String    @unique @map("attendance_id")
+  courseId      Int       @map("course_id")
+  teacherId     Int       @map("teacher_id")
+  date          String
+  isActive      Boolean   @default(false) @map("is_active")
+  duration      Int
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  course        Course    @relation(fields: [courseId], references: [id])
+  teacher       Teacher   @relation(fields: [teacherId], references: [id])
+  responses     AttendanceResponse[]
+
+  @@map("attendance")
+}
+
+model AttendanceResponse {
+  id            Int       @id @default(autoincrement())
+  attendanceId  Int       @map("attendance_id")
+  studentId     Int       @map("student_id")
+  studentName   String?   @map("student_name")
+  date          DateTime  @default(now())
+  timestamp     DateTime  @default(now())
+
+  // Relations
+  attendance    Attendance @relation(fields: [attendanceId], references: [id])
+  student       Student    @relation(fields: [studentId], references: [id])
+
+  @@map("attendance_responses")
+}
+
+// Assignment System -----------------------------------------------------------------------------------------
+model Assignment {
+  id            Int       @id @default(autoincrement())
+  courseId      Int       @map("course_id")
+  title         String
+  description   String
+  dueDate       String?   @map("due_date")
+  maxMarks      Float?    @map("max_marks")
+  isAssignment  Boolean   @map("is_assignment")
+  file          Bytes?
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  course        Course    @relation(fields: [courseId], references: [id])
+  submissions   AssignmentSubmission[]
+
+  @@map("assignments")
+}
+
+model AssignmentSubmission {
+  id            Int       @id @default(autoincrement())
+  assignmentId  Int       @map("assignment_id")
+  studentId     Int       @map("student_id")
+  submissionDate DateTime @default(now()) @map("submission_date")
+  file          Bytes?
+  marksObtained Float?    @map("marks_obtained")
+  feedback      String?
+  
+  // Relations
+  assignment    Assignment @relation(fields: [assignmentId], references: [id])
+  student       Student    @relation(fields: [studentId], references: [id])
+
+  @@map("assignment_submissions")
 }
