@@ -9,16 +9,35 @@ const prisma = new PrismaClient();
 router.post('/courses', authenticateUser, authorizeTeacher, async (req, res) => {
     try {
       const { name, courseCode, session, semester } = req.body;
-      const { id, firstName, lastName } = req.user;
+      
+      // Debug log 1: Request body
+      console.log('Request body:', req.body);
+      
+      // Debug log 2: User info
+      console.log('User info:', req.user);
+
+      const { userId } = req.user;
   
       const teacher = await prisma.teacher.findUnique({
-        where: { userId: id }
+        where: { userId: userId }
       });
+      
+      // Debug log 3: Teacher info
+      console.log('Teacher found:', teacher);
   
       if (!teacher) {
         return res.status(404).json({ message: 'Teacher profile not found' });
       }
   
+      // Debug log 4: Data being sent to create
+      console.log('Creating course with data:', {
+        name,
+        courseCode,
+        session,
+        semester,
+        teacherId: teacher.id
+      });
+
       const course = await prisma.course.create({
         data: {
           name,
@@ -39,13 +58,25 @@ router.post('/courses', authenticateUser, authorizeTeacher, async (req, res) => 
   
       res.status(201).json(course);
     } catch (error) {
-      console.error('Error creating course:', error);
+      // Enhanced error logging
+      console.error('Detailed error:', {
+        name: error.name,
+        message: error.message,
+        code: error.code,
+        meta: error.meta,
+        stack: error.stack
+      });
+
       if (error.code === 'P2002') {
         return res.status(400).json({ message: 'Course code already exists' });
       } else if (error.code === 'P2003') {
         return res.status(400).json({ message: 'Invalid teacher ID' });
       } else {
-        res.status(500).json({ message: 'Error creating course', error });
+        res.status(500).json({ 
+          message: 'Error creating course', 
+          details: error.message,
+          name: error.name
+        });
       }
     }
   });
@@ -113,10 +144,10 @@ router.put('/courses/:id', authenticateUser, authorizeTeacher, async (req, res) 
   try {
     const courseId = parseInt(req.params.id);
     const { name, courseCode, session, semester } = req.body;
-    const { id } = req.user;
+    const { userId } = req.user;  // Changed from id
 
     const teacher = await prisma.teacher.findUnique({
-      where: { userId: id }
+      where: { userId: userId }
     });
 
     const course = await prisma.course.findFirst({
@@ -153,10 +184,10 @@ router.put('/courses/:id', authenticateUser, authorizeTeacher, async (req, res) 
 router.delete('/courses/:id', authenticateUser, authorizeTeacher, async (req, res) => {
   try {
     const courseId = parseInt(req.params.id);
-    const { id } = req.user;
+    const { userId } = req.user;
 
     const teacher = await prisma.teacher.findUnique({
-      where: { userId: id }
+      where: { userId: userId }
     });
 
     const course = await prisma.course.findFirst({

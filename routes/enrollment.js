@@ -1,5 +1,5 @@
 import express from 'express';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, EnrollmentStatus } from '@prisma/client';
 import { authenticateUser, authorizeTeacher } from '../middlewares/auth.js';
 
 const router = express.Router();
@@ -9,10 +9,10 @@ const prisma = new PrismaClient();
 router.post('/enrollments', authenticateUser, async (req, res) => {
     try {
       const { courseId } = req.body;
-      const { id } = req.user;
+      const { userId } = req.user;
   
       const student = await prisma.student.findUnique({
-        where: { userId: id }
+        where: { userId: userId }
       });
   
       if (!student) {
@@ -49,16 +49,28 @@ router.put('/enrollments/:id/status', authenticateUser, authorizeTeacher, async 
     try {
       const enrollmentId = parseInt(req.params.id);
       const { status } = req.body;
-      const { id } = req.user;
+      const { userId } = req.user;
+      
+      console.log('Request params:', { enrollmentId, status, userId });
+      console.log('Valid statuses:', EnrollmentStatus);
   
-      const validStatuses = Object.values(EnrollmentStatus);
-      if (!validStatuses.includes(status)) {
-        return res.status(400).json({ message: 'Invalid status' });
+      if (!Object.values(EnrollmentStatus).includes(status)) {
+        return res.status(400).json({ 
+          message: 'Invalid status', 
+          allowedStatuses: Object.values(EnrollmentStatus),
+          receivedStatus: status 
+        });
       }
   
       const teacher = await prisma.teacher.findUnique({
-        where: { userId: id }
+        where: { userId: userId }
       });
+
+      if (!teacher) {
+        return res.status(404).json({ message: 'Teacher profile not found' });
+      }
+
+      console.log('Teacher found:', teacher);
   
       const enrollment = await prisma.enrollment.findFirst({
         where: {
@@ -77,6 +89,8 @@ router.put('/enrollments/:id/status', authenticateUser, authorizeTeacher, async 
           }
         }
       });
+      
+      console.log('Enrollment found:', enrollment);
   
       if (!enrollment) {
         return res.status(404).json({ message: 'Enrollment not found or unauthorized' });
@@ -103,17 +117,33 @@ router.put('/enrollments/:id/status', authenticateUser, authorizeTeacher, async 
   
       res.json(updatedEnrollment);
     } catch (error) {
-      res.status(500).json({ message: 'Error updating enrollment status', error });
+      console.error('Detailed error:', {
+        name: error.name,
+        message: error.message,
+        code: error.code,
+        meta: error.meta,
+        stack: error.stack
+      });
+
+      if (error.code === 'P2025') {
+        return res.status(404).json({ message: 'Enrollment record not found' });
+      }
+
+      res.status(500).json({ 
+        message: 'Error updating enrollment status', 
+        details: error.message,
+        code: error.code
+      });
     }
   });
 
 // Get pending enrollments for teacher's courses
 router.get('/enrollments/pending', authenticateUser, authorizeTeacher, async (req, res) => {
   try {
-    const { id } = req.user;
+    const { userId } = req.user;
 
     const teacher = await prisma.teacher.findUnique({
-      where: { userId: id }
+      where: { userId: userId }
     });
 
     const pendingEnrollments = await prisma.enrollment.findMany({
