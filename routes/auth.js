@@ -1,10 +1,8 @@
-// authRoutes.js
-const express = require('express');
+import express from 'express';
+import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
+import { PrismaClient } from '@prisma/client';
 const router = express.Router();
-const { PrismaClient } = require('@prisma/client');
-const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
-
 const prisma = new PrismaClient();
 
 // Middleware to validate request body
@@ -211,4 +209,4 @@ router.get('/me', authenticateToken, async (req, res) => {
   }
 });
 
-module.exports = router;
+export default router;
