@@ -82,7 +82,7 @@ router.post('/courses', authenticateUser, authorizeTeacher, async (req, res) => 
   });
 
 // Get all courses with enrollment counts
-router.get('/courses', authenticateUser, async (req, res) => {
+router.get('/all-courses', authenticateUser, async (req, res) => {
   try {
     const courses = await prisma.course.findMany({
       include: {
@@ -102,6 +102,55 @@ router.get('/courses', authenticateUser, async (req, res) => {
     res.status(500).json({ message: 'Error fetching courses', error });
   }
 });
+
+// Get teacher's courses
+router.get('/teacher-courses', authenticateUser, async (req, res) => {
+    try {
+      const { userId } = req.user;
+      
+      // First find the teacher
+      const teacher = await prisma.teacher.findUnique({
+        where: { userId: userId }
+      });
+
+      if (!teacher) {
+        return res.status(404).json({ message: 'Teacher profile not found' });
+      }
+
+      // Then find courses using teacher's ID
+      const courses = await prisma.course.findMany({
+        where: {
+          teacherId: teacher.id  // Use teacher.id instead of userId
+        },
+        include: {
+          teacher: {
+            select: {
+              firstName: true,
+              lastName: true
+            }
+          },
+          _count: {
+            select: { enrollments: true }
+          }
+        }
+      });
+      
+      res.json(courses);
+    } catch (error) {
+      console.error('Detailed error:', {
+        name: error.name,
+        message: error.message,
+        code: error.code,
+        meta: error.meta,
+        stack: error.stack
+      });
+      
+      res.status(500).json({ 
+        message: 'Error fetching courses', 
+        details: error.message 
+      });
+    }
+  });
 
 // Get course details with enrolled students
 router.get('/courses/:id', authenticateUser, async (req, res) => {
