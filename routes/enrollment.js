@@ -1,5 +1,5 @@
 import express from 'express';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, EnrollmentStatus } from '@prisma/client';
 import { authenticateUser, authorizeTeacher } from '../middlewares/auth.js';
 
 const router = express.Router();
@@ -44,28 +44,36 @@ router.post('/enrollments', authenticateUser, async (req, res) => {
     }
   });
 
-// Teacher updates enrollment status (accept/reject)
-router.put('/enrollments/:id/status', authenticateUser, authorizeTeacher, async (req, res) => {
+  // Teacher approves or rejects student's enrollment
+  router.put('/enrollments/:id/status', authenticateUser, authorizeTeacher, async (req, res) => {
     try {
       const enrollmentId = parseInt(req.params.id);
       const { status } = req.body;
       const { userId } = req.user;
-  
+
       const validStatuses = Object.values(EnrollmentStatus);
       if (!validStatuses.includes(status)) {
         return res.status(400).json({ message: 'Invalid status' });
       }
-  
       const teacher = await prisma.teacher.findUnique({
         where: { userId: userId }
       });
-  
+
+      if (!teacher) {
+        return res.status(403).json({ message: 'Teacher not found' });
+      }
+
+      // First verify the enrollment exists and belongs to one of teacher's courses
       const enrollment = await prisma.enrollment.findFirst({
         where: {
-          id: enrollmentId,
-          course: {
-            teacherId: teacher.id
-          }
+          AND: [
+            { id: enrollmentId },
+            {
+              course: {
+                teacherId: teacher.id
+              }
+            }
+          ]
         },
         include: {
           course: true,
@@ -77,14 +85,21 @@ router.put('/enrollments/:id/status', authenticateUser, authorizeTeacher, async 
           }
         }
       });
-  
+
       if (!enrollment) {
-        return res.status(404).json({ message: 'Enrollment not found or unauthorized' });
+        return res.status(404).json({ 
+          message: 'Enrollment not found or you are not authorized to modify it'
+        });
       }
-  
+
+      // Update the enrollment
       const updatedEnrollment = await prisma.enrollment.update({
-        where: { id: enrollmentId },
-        data: { status },
+        where: { 
+          id: enrollmentId,
+        },
+        data: { 
+          status: status 
+        },
         include: {
           course: {
             select: {
@@ -100,12 +115,30 @@ router.put('/enrollments/:id/status', authenticateUser, authorizeTeacher, async 
           }
         }
       });
-  
-      res.json(updatedEnrollment);
+
+      return res.json(updatedEnrollment);
+
     } catch (error) {
-      res.status(500).json({ message: 'Error updating enrollment status', error });
+      console.error('Detailed error:', error); // Add detailed logging
+      
+      if (error.code === 'P2025') {
+        return res.status(404).json({ 
+          message: 'Enrollment record not found'
+        });
+      }
+      
+      if (error.code === 'P2002') {
+        return res.status(409).json({ 
+          message: 'Unique constraint violation'
+        });
+      }
+
+      return res.status(500).json({ 
+        message: 'Error updating enrollment status',
+        error: error.message || 'Unknown error'
+      });
     }
-  });
+});
 
 // Get pending enrollments for teacher's courses
 router.get('/enrollments/pending', authenticateUser, authorizeTeacher, async (req, res) => {
