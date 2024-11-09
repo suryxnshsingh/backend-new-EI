@@ -110,7 +110,7 @@ router.put('/enrollments/:id/status', authenticateUser, authorizeTeacher, async 
 // Get pending enrollments for teacher's courses
 router.get('/enrollments/pending', authenticateUser, authorizeTeacher, async (req, res) => {
   try {
-    const { id } = req.user;
+    const { userId } = req.user;
 
     const teacher = await prisma.teacher.findUnique({
       where: { userId: userId }
