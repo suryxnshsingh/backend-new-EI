@@ -70,6 +70,7 @@ model Teacher {
   courses   Course[]
   quizzes   Quiz[]
   attendance Attendance[]
+  co        CO[]
 
   @@map("teachers")
 }
@@ -119,6 +120,7 @@ model Course {
   quizzes     Quiz[]
   attendance  Attendance[]
   assignments Assignment[]
+  co          CO[]
 
   @@map("courses")
 }
@@ -256,3 +258,26 @@ model AssignmentSubmission {
 
   @@map("assignment_submissions")
 }
+
+// CO -----------------------------------------------------------------------------------------
+
+model CO {
+  id        Int      @id @default(autoincrement())
+
+  MST1_Q1 String
+  MST1_Q2 String
+  MST1_Q3 String
+  MST2_Q1 String
+  MST2_Q2 String
+  MST2_Q3 String
+  Quiz_Assignment String[]
+
+  // Relation fields
+  courseId      Int            @map("course_id")
+  teacherId     Int            @map("teacher_id")
+  course        Course         @relation(fields: [courseId], references: [id])
+  teacher       Teacher        @relation(fields: [teacherId], references: [id])
+
+  @@map("co")
+}
+
