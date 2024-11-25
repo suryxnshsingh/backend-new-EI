@@ -160,8 +160,11 @@ model QuizQuestion {
   option4           String?  @map("option_4")
   correctOption     Int?     @map("correct_option")
   textualQuesMarks  Float?   @map("textual_ques_marks")
-  minChar          Int?     @map("min_char")
-  keywords         String[]
+  minChar           Int?     @map("min_char")
+  keywords          String[]
+  
+  referenceImage   String?  @map("reference_image")       // URL or path to the image
+  imageCaption     String?  @map("image_caption")        // Optional caption for the image
   
   // Relation fields
   quizId          Int      @map("quiz_id")
