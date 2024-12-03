@@ -267,13 +267,17 @@ model AssignmentSubmission {
 model CO {
   id        Int      @id @default(autoincrement())
 
-  MST1_Q1 String
-  MST1_Q2 String
-  MST1_Q3 String
-  MST2_Q1 String
-  MST2_Q2 String
-  MST2_Q3 String
-  Quiz_Assignment String[]
+  MST1_Q1             String
+  MST1_Q2             String
+  MST1_Q3             String
+  MST2_Q1             String
+  MST2_Q2             String
+  MST2_Q3             String
+  QuizAssignment_Q1   String
+  QuizAssignment_Q2   String
+  QuizAssignment_Q3   String
+  QuizAssignment_Q4   String
+  QuizAssignment_Q5   String
 
   // Relation fields
   courseId      Int            @map("course_id")
