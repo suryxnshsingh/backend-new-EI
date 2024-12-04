@@ -260,4 +260,5 @@ router.delete('/courses/:id', authenticateUser, authorizeTeacher, async (req, re
   }
 });
 
+
 export default router;

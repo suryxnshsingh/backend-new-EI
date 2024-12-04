@@ -3,6 +3,7 @@ import cors from 'cors';
 import authRoutes from './routes/auth.js';
 import courseRoutes from './routes/course.js';
 import enrollmentRoutes from './routes/enrollment.js';
+import coRoutes from './routes/co.js';
 
 const app = express();
 
@@ -12,6 +13,7 @@ app.use(cors());
 app.use('/api/auth', authRoutes);
 app.use('/api/courses', courseRoutes);
 app.use('/api/enrollment', enrollmentRoutes);
+app.use('/api/co', coRoutes);
 
 const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => {
