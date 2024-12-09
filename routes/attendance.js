@@ -1,6 +1,6 @@
 import express from 'express';
 import { PrismaClient } from '@prisma/client';
-import { authenticateUser, authorizeTeacher } from '../middlewares/auth.js';
+import { authenticateUser } from '../middlewares/auth.js';
 
 const router = express.Router();
 const prisma = new PrismaClient();
@@ -9,7 +9,7 @@ const prisma = new PrismaClient();
 
 
 // Teacher creates attendance Session for a course
-app.post('/attendance', async (req, res) => {
+router.post('/attendance', authenticateUser, async (req, res) => {
     const { courseId, teacherId, date, duration } = req.body;
     try {
         const course = await prisma.course.findUnique({ where: { id: courseId } });
@@ -42,7 +42,7 @@ app.post('/attendance', async (req, res) => {
 
   
 // Toggle attendance session status
-app.patch('/attendance/:id/status', async (req, res) => {
+router.patch('/attendance/:id/status',authenticateUser, async (req, res) => {
     const { id } = req.params;
     const { isActive } = req.body;
     try {
@@ -63,7 +63,7 @@ app.patch('/attendance/:id/status', async (req, res) => {
 
 
 // Get all attendance records for a course
-app.get('/courses/:courseId/attendance', async (req, res) => {
+router.get('/courses/:courseId/attendance', async (req, res) => {
     const { courseId } = req.params;
     try {
       const attendanceRecords = await prisma.attendance.findMany({
@@ -77,7 +77,7 @@ app.get('/courses/:courseId/attendance', async (req, res) => {
   });
   
 // Get attendance summary
-app.get('/attendance/:id/summary', async (req, res) => {
+router.get('/attendance/:id/summary', async (req, res) => {
     const { id } = req.params;
     try {
       const attendanceResponses = await prisma.attendanceResponse.findMany({
@@ -93,9 +93,9 @@ app.get('/attendance/:id/summary', async (req, res) => {
   //-------------------------------------STUDENT-------------------------------------
 
 // Student marks attendance
-app.post('/attendance/:id/response', async (req, res) => {
+router.post('/attendance/:id/response', authenticateUser, async (req, res) => {
     const { id } = req.params;
-    const { studentId, studentName } = req.body;
+    const { studentId, enrollment } = req.body;
     try {
         const session = await prisma.attendance.findUnique({ where: { id: parseInt(id) } });
         if (!session || !session.isActive) {
@@ -113,7 +113,7 @@ app.post('/attendance/:id/response', async (req, res) => {
             data: {
                 attendanceId: parseInt(id),
                 studentId,
-                studentName,
+                enrollment,
             },
         });
         res.status(201).json(attendanceResponse);
@@ -124,7 +124,7 @@ app.post('/attendance/:id/response', async (req, res) => {
 
   
 // Get attendance status for a student
-app.get('/students/:studentId/attendance', async (req, res) => {
+router.get('/students/:studentId/attendance', async (req, res) => {
     const { studentId } = req.params;
     try {
       const records = await prisma.attendanceResponse.findMany({
@@ -141,7 +141,7 @@ app.get('/students/:studentId/attendance', async (req, res) => {
   //-------------------------------------ADMIN-------------------------------------
 
   //get all attendance records
-  app.get('/attendance', async (req, res) => {
+router.get('/attendance', async (req, res) => {
     try {
       const sessions = await prisma.attendance.findMany();
       res.json(sessions);
@@ -150,3 +150,5 @@ app.get('/students/:studentId/attendance', async (req, res) => {
     }
   });
   
+
+export default router;
