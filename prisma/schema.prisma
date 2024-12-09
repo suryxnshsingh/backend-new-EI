@@ -215,7 +215,7 @@ model AttendanceResponse {
   id            Int       @id @default(autoincrement())
   attendanceId  Int       @map("attendance_id")
   studentId     Int       @map("student_id")
-  studentName   String?   @map("student_name")
+  enrollment   String?   @map("enrollment")
   date          DateTime  @default(now())
   timestamp     DateTime  @default(now())
 
