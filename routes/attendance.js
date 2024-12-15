@@ -26,7 +26,6 @@ router.post('/attendance', authenticateUser, async (req, res) => {
 
         const attendance = await prisma.attendance.create({
             data: {
-                attendanceId: `ATT-${Date.now()}`,
                 courseId,
                 teacherId,
                 date,
