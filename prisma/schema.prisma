@@ -194,7 +194,6 @@ model QuizResponse {
 // Attendance System ---------------------------------------------------------------------------
 model Attendance {
   id            Int       @id @default(autoincrement())
-  attendanceId  String    @unique @map("attendance_id")
   courseId      Int       @map("course_id")
   teacherId     Int       @map("teacher_id")
   date          String
