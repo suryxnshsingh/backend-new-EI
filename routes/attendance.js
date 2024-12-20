@@ -136,15 +136,20 @@ router.get('/courses/:courseId/students/:studentId/attendance', authenticateUser
 // Student marks attendance
 router.post('/attendance/:id/mark', authenticateUser, async (req, res) => {
     const { id } = req.params;
-    const { studentId } = req.body;
+    const { userId } = req.body;
     try {
+        const student = await prisma.student.findUnique({ where: { userId } });
+        if (!student) {
+            return res.status(404).json({ error: 'Student not found.' });
+        }
+
         const session = await prisma.attendance.findUnique({ where: { id: parseInt(id) } });
         if (!session || !session.isActive) {
             return res.status(400).json({ error: 'Invalid or inactive attendance session.' });
         }
 
         const existingResponse = await prisma.attendanceResponse.findFirst({
-            where: { attendanceId: parseInt(id), studentId },
+            where: { attendanceId: parseInt(id), studentId: student.id },
         });
         if (existingResponse) {
             return res.status(400).json({ error: 'Attendance already marked for this session.' });
@@ -153,7 +158,7 @@ router.post('/attendance/:id/mark', authenticateUser, async (req, res) => {
         const attendanceResponse = await prisma.attendanceResponse.create({
             data: {
                 attendanceId: parseInt(id),
-                studentId,
+                studentId: student.id,
             },
         });
         res.status(201).json(attendanceResponse);
