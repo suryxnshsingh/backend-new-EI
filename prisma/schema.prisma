@@ -214,8 +214,6 @@ model AttendanceResponse {
   id            Int       @id @default(autoincrement())
   attendanceId  Int       @map("attendance_id")
   studentId     Int       @map("student_id")
-  enrollment   String?   @map("enrollment")
-  date          DateTime  @default(now())
   timestamp     DateTime  @default(now())
 
   // Relations
@@ -272,11 +270,6 @@ model CO {
   MST2_Q1             String
   MST2_Q2             String
   MST2_Q3             String
-  QuizAssignment_Q1   String
-  QuizAssignment_Q2   String
-  QuizAssignment_Q3   String
-  QuizAssignment_Q4   String
-  QuizAssignment_Q5   String
 
   // Relation fields
   courseId      Int            @map("course_id")
