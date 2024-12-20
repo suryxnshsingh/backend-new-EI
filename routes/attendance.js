@@ -162,28 +162,6 @@ router.post('/attendance/:id/mark', authenticateUser, async (req, res) => {
     }
 });
 
-// Student updates their attendance response
-router.patch('/attendance/:id/mark', authenticateUser, async (req, res) => {
-    const { id } = req.params;
-    const { studentId, newTimestamp } = req.body;
-    try {
-        const attendanceResponse = await prisma.attendanceResponse.findFirst({
-            where: { attendanceId: parseInt(id), studentId },
-        });
-        if (!attendanceResponse) {
-            return res.status(404).json({ error: 'Attendance response not found.' });
-        }
-
-        const updatedResponse = await prisma.attendanceResponse.update({
-            where: { id: attendanceResponse.id },
-            data: { timestamp: newTimestamp || new Date() },
-        });
-        res.json(updatedResponse);
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
 // Student views their attendance records
 router.get('/students/:studentId/attendance', authenticateUser, async (req, res) => {
     const { studentId } = req.params;
