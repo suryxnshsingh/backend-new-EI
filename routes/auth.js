@@ -2,7 +2,7 @@ import express, { text } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { PrismaClient } from '@prisma/client';
-import nodemailer from 'nodemailer';
+import { transporter, getMailOptions } from '../middlewares/emailconfig.js';
 const router = express.Router();
 const prisma = new PrismaClient();
 
@@ -166,7 +166,7 @@ router.post('/login', async (req, res) => {
 
 
 // Request Password Reset
-router.post('/request-password-reset', async (req, res) => {
+router.post('/forgot-password', async (req, res) => {
   try {
     const { email } = req.body;
 
@@ -217,25 +217,10 @@ router.post('/request-password-reset', async (req, res) => {
     }
 
     // Configure password reset link
-    const resetLink = `${process.env.BASE_URL}/reset-password?token=${token}`;
+    const resetLink = `${process.env.BASE_URL}/change-password?token=${token}`;
 
-    // Configure nodemailer
-    const transporter = nodemailer.createTransport({
-      service: 'gmail',
-      auth: {
-        user: process.env.EMAIL,
-        pass: process.env.EMAIL_PASSWORD,
-      },
-    });
-
-    const mailOptions = {
-      from: process.env.EMAIL,
-      to: email,
-      subject: 'Reset EI-LMS Password',
-      text: `Click the link below to reset your password:\n\n${resetLink}`,
-      html: `<p>Click the link below to reset your password:</p><p><a href="${resetLink}">Reset Password</a></p>`
-    };
-
+    // Send email
+    const mailOptions = getMailOptions(email, user, resetLink);
     transporter.sendMail(mailOptions, (error, info) => {
       if (error) {
         res.status(500).json({ error: error.message });
@@ -251,16 +236,59 @@ router.post('/request-password-reset', async (req, res) => {
   }
 });
 
+// Change Password route
+router.post('/change-password', async (req, res) => {
+  try {
+    const { token, newPassword } = req.body;
 
+    // Validate request body
+    if (!token || !newPassword) {
+      return res.status(400).json({ message: 'Token and new password are required' });
+    }
 
+    // Find reset token
+    const resetToken = await prisma.resetToken.findUnique({
+      where: { token }
+    });
 
-// Change Password
+    if (!resetToken) {
+      return res.status(404).json({ message: 'Invalid or expired token' });
+    }
 
+    // Verify token
+    let decoded;
+    try {
+      decoded = jwt.verify(token, process.env.JWT_SECRET);
+    } catch (err) {
+      return res.status(403).json({ message: 'Invalid or expired token' });
+    }
 
+    // Check if token is expired
+    if (new Date(resetToken.expiresAt) < new Date()) {
+      return res.status(403).json({ message: 'Token has expired' });
+    }
 
+    // Hash new password
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
 
+    // Update user password
+    await prisma.user.update({
+      where: { id: resetToken.userId },
+      data: { password: hashedPassword }
+    });
 
+    // Delete reset token
+    await prisma.resetToken.delete({
+      where: { id: resetToken.id }
+    });
 
+    res.json({ message: 'Password changed successfully' });
+
+  } catch (error) {
+    console.error('Change password error:', error);
+    res.status(500).json({ message: 'Error changing password' });
+  }
+});
 
 // Middleware to protect routes
 const authenticateToken = (req, res, next) => {
