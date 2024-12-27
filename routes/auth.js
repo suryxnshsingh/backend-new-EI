@@ -1,7 +1,8 @@
-import express from 'express';
+import express, { text } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { PrismaClient } from '@prisma/client';
+import nodemailer from 'nodemailer';
 const router = express.Router();
 const prisma = new PrismaClient();
 
@@ -162,6 +163,104 @@ router.post('/login', async (req, res) => {
     res.status(500).json({ message: 'Error logging in' });
   }
 });
+
+
+// Request Password Reset
+router.post('/request-password-reset', async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    // Validate request body
+    if (!email) {
+      return res.status(400).json({ message: 'Email is required' });
+    }
+
+    // Find user
+    const user = await prisma.user.findUnique({
+      where: { email }
+    });
+
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Generate password reset token
+    const token = jwt.sign(
+      { userId: user.id },
+      process.env.JWT_SECRET,
+      { expiresIn: '10m' }
+    );
+
+    // Check if a reset token already exists for the user
+    const existingToken = await prisma.resetToken.findUnique({
+      where: { userId: user.id }
+    });
+
+    if (existingToken) {
+      // Update the existing token
+      await prisma.resetToken.update({
+        where: { userId: user.id },
+        data: {
+          token,
+          createdAt: new Date(),
+          expiresAt: new Date(Date.now() + 10 * 60 * 1000) // 10 minutes from now
+        }
+      });
+    } else {
+      // Create a new token
+      await prisma.resetToken.create({
+        data: {
+          token,
+          userId: user.id
+        }
+      });
+    }
+
+    // Configure password reset link
+    const resetLink = `${process.env.BASE_URL}/reset-password?token=${token}`;
+
+    // Configure nodemailer
+    const transporter = nodemailer.createTransport({
+      service: 'gmail',
+      auth: {
+        user: process.env.EMAIL,
+        pass: process.env.EMAIL_PASSWORD,
+      },
+    });
+
+    const mailOptions = {
+      from: process.env.EMAIL,
+      to: email,
+      subject: 'Reset EI-LMS Password',
+      text: `Click the link below to reset your password:\n\n${resetLink}`,
+      html: `<p>Click the link below to reset your password:</p><p><a href="${resetLink}">Reset Password</a></p>`
+    };
+
+    transporter.sendMail(mailOptions, (error, info) => {
+      if (error) {
+        res.status(500).json({ error: error.message });
+      } else {
+        res.status(200).json({ message: 'Email sent: ' + info.response });
+      }
+    });
+    res.json({ message: 'Password reset email sent successfully' });
+
+  } catch (error) {
+    console.error('Password reset request error:', error);
+    res.status(500).json({ message: 'Error requesting password reset' });
+  }
+});
+
+
+
+
+// Change Password
+
+
+
+
+
+
 
 // Middleware to protect routes
 const authenticateToken = (req, res, next) => {

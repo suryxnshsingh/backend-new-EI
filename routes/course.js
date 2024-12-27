@@ -9,34 +9,15 @@ const prisma = new PrismaClient();
 router.post('/courses', authenticateUser, authorizeTeacher, async (req, res) => {
     try {
       const { name, courseCode, session, semester } = req.body;
-      
-      // Debug log 1: Request body
-      console.log('Request body:', req.body);
-      
-      // Debug log 2: User info
-      console.log('User info:', req.user);
-
       const { userId } = req.user;
   
       const teacher = await prisma.teacher.findUnique({
         where: { userId: userId }
       });
-      
-      // Debug log 3: Teacher info
-      console.log('Teacher found:', teacher);
   
       if (!teacher) {
         return res.status(404).json({ message: 'Teacher profile not found' });
       }
-  
-      // Debug log 4: Data being sent to create
-      console.log('Creating course with data:', {
-        name,
-        courseCode,
-        session,
-        semester,
-        teacherId: teacher.id
-      });
 
       const course = await prisma.course.create({
         data: {
@@ -250,15 +231,19 @@ router.delete('/courses/:id', authenticateUser, authorizeTeacher, async (req, re
       return res.status(404).json({ message: 'Course not found or unauthorized' });
     }
 
+    // Delete enrollments related to the course
+    await prisma.enrollment.deleteMany({
+      where: { courseId: courseId }
+    });
+
     await prisma.course.delete({
       where: { id: courseId }
     });
 
-    res.json({ message: 'Course deleted successfully' });
+    res.json({ message: 'Course and related enrollments deleted successfully' });
   } catch (error) {
     res.status(500).json({ message: 'Error deleting course', error });
   }
 });
-
 
 export default router;
