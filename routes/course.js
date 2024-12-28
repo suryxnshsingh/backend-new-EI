@@ -169,6 +169,25 @@ router.get('/courses/:id', authenticateUser, async (req, res) => {
   }
 });
 
+// Get course details by course ID
+router.get('/course-details/:courseId', authenticateUser, async (req, res) => {
+  try {
+    const courseId = parseInt(req.params.courseId);
+
+    const course = await prisma.course.findUnique({
+      where: { id: courseId },
+    });
+
+    if (!course) {
+      return res.status(404).json({ message: 'Course not found' });
+    }
+
+    res.json(course);
+  } catch (error) {
+    res.status(500).json({ message: 'Error fetching course details', error });
+  }
+});
+
 // Update course details (Teachers only)
 router.put('/courses/:id', authenticateUser, authorizeTeacher, async (req, res) => {
   try {
