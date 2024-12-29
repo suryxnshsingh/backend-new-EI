@@ -8,7 +8,7 @@ const prisma = new PrismaClient();
 //-------------------------------------TEACHER-------------------------------------
 
 
-// Teacher creates attendance Session for a course
+// Teacher creates attendance Session for a course    (frontend done)
 router.post('/attendance', authenticateUser, async (req, res) => {
     const { courseId, teacherId, date, duration } = req.body;
     try {
@@ -40,7 +40,7 @@ router.post('/attendance', authenticateUser, async (req, res) => {
 });
 
   
-// Toggle attendance session status
+// Toggle attendance session status    (frontend done)
 router.patch('/attendance/:id/status',authenticateUser, async (req, res) => {
     const { id } = req.params;
     const { isActive } = req.body;
@@ -61,7 +61,7 @@ router.patch('/attendance/:id/status',authenticateUser, async (req, res) => {
 });
 
 
-// Teacher deletes a specific attendance session
+// Teacher deletes a specific attendance session      (frontend done)
 router.delete('/attendance/:id', authenticateUser, async (req, res) => {
     const { id } = req.params;
     const { teacherId } = req.body;
@@ -83,7 +83,7 @@ router.delete('/attendance/:id', authenticateUser, async (req, res) => {
 });
 
 
-// Get all attendance records for a course
+// Get all attendance records for a course      (FE to do)
 router.get('/courses/:courseId/attendance', async (req, res) => {
     const { courseId } = req.params;
     try {
@@ -97,7 +97,7 @@ router.get('/courses/:courseId/attendance', async (req, res) => {
     }
   });
   
-// Get attendance summary
+// Get attendance summary                     (FE to do)
 router.get('/attendance/:id/summary', async (req, res) => {
     const { id } = req.params;
     try {
@@ -112,7 +112,7 @@ router.get('/attendance/:id/summary', async (req, res) => {
   });
 
 
-// Teacher views attendance records of a specific student in their course
+// Teacher views attendance records of a specific student in their course    (FE to do)
 router.get('/courses/:courseId/students/:studentId/attendance', authenticateUser, async (req, res) => {
   const { courseId, studentId } = req.params;
   try {
@@ -133,7 +133,7 @@ router.get('/courses/:courseId/students/:studentId/attendance', authenticateUser
   
   //-------------------------------------STUDENT-------------------------------------
 
-// Student marks attendance
+// Student marks attendance     (FE done)
 router.post('/attendance/:id/mark', authenticateUser, async (req, res) => {
     const { id } = req.params;
     const { userId } = req.body;
@@ -167,7 +167,7 @@ router.post('/attendance/:id/mark', authenticateUser, async (req, res) => {
     }
 });
 
-// Student views their attendance records
+// Student views their attendance records          (FE to do)
 router.get('/students/:studentId/attendance', authenticateUser, async (req, res) => {
     const { studentId } = req.params;
     try {
@@ -181,7 +181,7 @@ router.get('/students/:studentId/attendance', authenticateUser, async (req, res)
     }
 });
 
-// Student views attendance for a specific session
+// Student views attendance for a specific session       (FE to do)
 router.get('/attendance/:id/student/:studentId', authenticateUser, async (req, res) => {
     const { id, studentId } = req.params;
     try {
@@ -198,7 +198,7 @@ router.get('/attendance/:id/student/:studentId', authenticateUser, async (req, r
     }
 });
 
-// Student views attendance for a specific subject
+// Student views attendance for a specific subject        (FE to do)
 router.get('/students/:studentId/courses/:courseId/attendance', authenticateUser, async (req, res) => {
     const { studentId, courseId } = req.params;
     try {
@@ -220,7 +220,7 @@ router.get('/students/:studentId/courses/:courseId/attendance', authenticateUser
 
   //-------------------------------------ADMIN-------------------------------------
 
-  //get all attendance records
+  //get all attendance records            (to be figured out)
 router.get('/attendance', async (req, res) => {
     try {
       const sessions = await prisma.attendance.findMany();
