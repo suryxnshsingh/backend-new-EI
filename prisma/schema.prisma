@@ -108,7 +108,7 @@ model Enrollment {
 model Course {
   id          Int      @id @default(autoincrement())
   name        String   
-  courseCode  String   @unique @map("course_code")
+  courseCode  String   @map("course_code")
   session     String
   semester    String
   
