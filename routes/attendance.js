@@ -411,16 +411,34 @@ router.get('/attendance/:id/student/:studentId', authenticateUser, async (req, r
 router.get('/students/:studentId/courses/:courseId/attendance', authenticateUser, async (req, res) => {
     const { studentId, courseId } = req.params;
     try {
-        const attendanceRecords = await prisma.attendanceResponse.findMany({
+        // Get all attendance sessions for this course
+        const allSessions = await prisma.attendance.findMany({
             where: {
-                studentId: parseInt(studentId),
-                attendance: {
-                    courseId: parseInt(courseId),
-                },
+                courseId: parseInt(courseId),
+                isActive: false // Only get completed sessions
             },
-            include: { attendance: true },
+            include: {
+                responses: {
+                    where: {
+                        studentId: parseInt(studentId)
+                    }
+                }
+            },
+            orderBy: {
+                date: 'desc'
+            }
         });
-        res.json(attendanceRecords);
+
+        // Format the response to include attendance status
+        const formattedSessions = allSessions.map(session => ({
+            id: session.id,
+            date: session.date,
+            status: session.responses.length > 0 ? 'Present' : 'Absent',
+            courseName: session.courseName,
+            courseCode: session.courseCode
+        }));
+
+        res.json(formattedSessions);
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -571,6 +589,132 @@ router.get('/attendance/:id/summary', authenticateUser, async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+// Get all attendance history for a student
+router.get('/students/:studentId/attendance-history', authenticateUser, async (req, res) => {
+    const { studentId } = req.params;
+    console.log('Fetching attendance history for student:', studentId);
+    
+    try {
+        // 1. First verify the student exists
+        const student = await prisma.student.findFirst({
+            where: { userId: parseInt(studentId) }
+        });
+
+        if (!student) {
+            console.log('Student not found for userId:', studentId);
+            return res.status(404).json({ error: 'Student not found' });
+        }
+
+        console.log('Found student:', student.id);
+
+        // 2. Get all courses the student is enrolled in
+        const enrollments = await prisma.enrollment.findMany({
+            where: {
+                studentId: student.id,
+                status: 'ACCEPTED'
+            },
+            include: {
+                course: true
+            }
+        });
+        
+        console.log('Enrollments:', {
+            count: enrollments.length,
+            courses: enrollments.map(e => ({
+                id: e.courseId,
+                name: e.course.name,
+                code: e.course.courseCode
+            }))
+        });
+
+        if (enrollments.length === 0) {
+            return res.json([]);
+        }
+
+        // 3. Get all attendance sessions from these courses
+        const attendanceSessions = await prisma.attendance.findMany({
+            where: {
+                courseId: {
+                    in: enrollments.map(e => e.courseId)
+                },
+                isActive: false
+            },
+            include: {
+                course: true
+            }
+        });
+
+        console.log('Attendance sessions found:', attendanceSessions.length);
+
+        if (attendanceSessions.length === 0) {
+            return res.json([]);
+        }
+
+        // 4. Get student's responses for these sessions
+        const responses = await prisma.attendanceResponse.findMany({
+            where: {
+                studentId: student.id,
+                attendanceId: {
+                    in: attendanceSessions.map(s => s.id)
+                }
+            }
+        });
+
+        console.log('Student responses found:', responses.length);
+
+        // 5. Create a map of responses for quick lookup
+        const responseMap = new Map(
+            responses.map(r => [r.attendanceId, r])
+        );
+
+        // 6. Format all sessions with present/absent status
+        const formattedRecords = attendanceSessions.map(session => ({
+            date: session.date,
+            courseName: session.course.name,
+            courseCode: session.course.courseCode,
+            status: responseMap.has(session.id) ? 'Present' : 'Absent'
+        }));
+
+        console.log('Final formatted records:', {
+            total: formattedRecords.length,
+            present: formattedRecords.filter(r => r.status === 'Present').length,
+            absent: formattedRecords.filter(r => r.status === 'Absent').length
+        });
+
+        res.json(formattedRecords);
+    } catch (err) {
+        console.error('Error in attendance history:', err);
+        res.status(500).json({ error: 'Failed to fetch attendance history' });
+    }
+});
+
+// DEBUG route - remove in production
+router.get('/debug/student/:studentId', authenticateUser, async (req, res) => {
+    const { studentId } = req.params;
+    try {
+        const debug = {
+            enrollments: await prisma.enrollment.findMany({
+                where: { studentId: parseInt(studentId) }
+            }),
+            attendanceSessions: await prisma.attendance.findMany({
+                where: { 
+                    courseId: {
+                        in: (await prisma.enrollment.findMany({
+                            where: { studentId: parseInt(studentId) }
+                        })).map(e => e.courseId)
+                    }
+                }
+            }),
+            responses: await prisma.attendanceResponse.findMany({
+                where: { studentId: parseInt(studentId) }
+            })
+        };
+        res.json(debug);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
 export default router;
