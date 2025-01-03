@@ -120,8 +120,12 @@ router.get('/attendance/monthly-report/:courseId', authenticateUser, async (req,
 
     // Headers
     worksheet.getCell('A1').value = 'Department of Electronics and Instrumentation - Shri G. S. Institute of Tech. and Science';
-    worksheet.getCell('A2').value = 
-      `Attendance record for ${months[parseInt(month) - 1]} - Semester ${semester} - Session ${session}`;
+    
+    // Format dates as DD/MM/YYYY
+    const formattedStartDate = new Date(startDate).toLocaleDateString('en-GB'); // DD/MM/YYYY
+    const formattedEndDate = new Date(endDate).toLocaleDateString('en-GB');   // DD/MM/YYYY
+    
+    worksheet.getCell('A2').value = `Attendance record from ${formattedStartDate} to ${formattedEndDate} - Semester ${semester} - Session ${session}`;
 
     ['A1', 'A2'].forEach(cell => {
       worksheet.getCell(cell).alignment = { horizontal: 'center', vertical: 'middle' };
@@ -159,6 +163,19 @@ router.get('/attendance/monthly-report/:courseId', authenticateUser, async (req,
         row.getCell(sessionDates.length + 3).value = `${percentage}%`;
       });
 
+    // Style the worksheet
+    worksheet.eachRow((row, rowNumber) => {
+      row.eachCell(cell => {
+        cell.alignment = { horizontal: 'center' };
+        cell.border = {
+          top: { style: 'thin' },
+          left: { style: 'thin' },
+          bottom: { style: 'thin' },
+          right: { style: 'thin' }
+        };
+      });
+    });
+
     // Adjust column widths for date columns
     sessionDates.forEach((_, index) => {
       worksheet.getColumn(index + 3).width = 12; // Width for date columns
@@ -185,6 +202,197 @@ router.get('/attendance/monthly-report/:courseId', authenticateUser, async (req,
   } catch (err) {
     console.error('Error in monthly report:', err);
     return res.status(500).json({ error: err.message });
+  }
+});
+
+// Add this new route for date range reports
+router.get('/attendance/range-report/:courseId', authenticateUser, async (req, res) => {
+  try {
+    const { courseId } = req.params;
+    const { startDate, endDate, session, semester } = req.query;
+    
+    // Validate dates
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    start.setHours(0, 0, 0, 0);
+    end.setHours(23, 59, 59, 999);
+
+    if (start > end) {
+      return res.status(400).json({ error: 'Start date must be before end date' });
+    }
+
+    // Get course details
+    const course = await prisma.course.findUnique({
+      where: { id: parseInt(courseId) },
+      include: {
+        teacher: true
+      }
+    });
+
+    if (!course) {
+      return res.status(404).json({ error: 'Course not found' });
+    }
+
+    // Get all enrolled students
+    const enrolledStudents = await prisma.enrollment.findMany({
+      where: {
+        courseId: parseInt(courseId),
+        status: 'ACCEPTED'
+      },
+      include: {
+        student: true
+      }
+    });
+
+    // Get attendance sessions within date range
+    const attendanceSessions = await prisma.attendance.findMany({
+      where: {
+        courseId: parseInt(courseId),
+        date: {
+          gte: start.toISOString().split('T')[0], // Convert to YYYY-MM-DD format
+          lte: end.toISOString().split('T')[0]
+        },
+        isActive: false
+      },
+      include: {
+        responses: true
+      },
+      orderBy: {
+        date: 'asc'
+      }
+    });
+
+    if (attendanceSessions.length === 0) {
+      return res.status(404).json({ error: 'No attendance sessions found for this date range' });
+    }
+
+    // Get array of days when sessions were created with full dates
+    const sessionDates = attendanceSessions.map(session => ({
+      day: new Date(session.date).getDate(),
+      fullDate: new Date(session.date).toLocaleDateString('en-GB') // DD/MM/YYYY format
+    }));
+
+    // Create attendance map
+    const attendanceMap = new Map();
+    enrolledStudents.forEach(enrollment => {
+      attendanceMap.set(enrollment.student.id, {
+        enrollmentNumber: enrollment.student.enrollmentNumber || 'N/A',
+        name: `${enrollment.student.firstName} ${enrollment.student.lastName}`,
+        attendance: {}
+      });
+    });
+
+    // Fill attendance data
+    attendanceSessions.forEach(session => {
+      const sessionDate = new Date(session.date);
+      // Initialize all students as absent for this day
+      enrolledStudents.forEach(enrollment => {
+        if (!attendanceMap.get(enrollment.student.id).attendance[sessionDate.getDate()]) {
+          attendanceMap.get(enrollment.student.id).attendance[sessionDate.getDate()] = 'A';
+        }
+      });
+      // Mark present students
+      session.responses.forEach(response => {
+        if (attendanceMap.has(response.studentId)) {
+          attendanceMap.get(response.studentId).attendance[sessionDate.getDate()] = 'P';
+        }
+      });
+    });
+
+    // Create Excel workbook
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('Attendance');
+
+    // Set column widths
+    worksheet.getColumn('A').width = 20;
+    worksheet.getColumn('B').width = 30;
+
+    // Headers
+    worksheet.mergeCells('A1:AH1');
+    worksheet.mergeCells('A2:AH2');
+    worksheet.getCell('A1').value = 'Department of Electronics and Instrumentation - Shri G. S. Institute of Tech. and Science';
+    
+    // Format dates as DD/MM/YYYY
+    const formattedStartDate = new Date(startDate).toLocaleDateString('en-GB'); // DD/MM/YYYY
+    const formattedEndDate = new Date(endDate).toLocaleDateString('en-GB');   // DD/MM/YYYY
+    
+    worksheet.getCell('A2').value = `Attendance record from ${formattedStartDate} to ${formattedEndDate} - Semester ${semester} - Session ${session}`;
+
+    ['A1', 'A2'].forEach(cell => {
+      worksheet.getCell(cell).alignment = { horizontal: 'center', vertical: 'middle' };
+      worksheet.getCell(cell).font = { bold: true, size: cell === 'A1' ? 16 : 14 };
+    });
+
+    // Column headers
+    worksheet.getRow(3).values = [
+      'Enrollment Number',
+      'Name',
+      ...sessionDates.map(date => date.fullDate),
+      'Percentage'
+    ];
+
+    // Data rows - Sort by enrollment number before creating rows
+    Array.from(attendanceMap.values())
+      .sort((a, b) => {
+        // Handle 'N/A' cases
+        if (a.enrollmentNumber === 'N/A') return 1;
+        if (b.enrollmentNumber === 'N/A') return -1;
+        return a.enrollmentNumber.localeCompare(b.enrollmentNumber, undefined, { numeric: true });
+      })
+      .forEach((student, index) => {
+        const row = worksheet.getRow(index + 4);
+        row.values = [student.enrollmentNumber, student.name];
+
+        // Fill attendance data using day numbers from the dates
+        sessionDates.forEach((date, dayIndex) => {
+          row.getCell(dayIndex + 3).value = student.attendance[date.day] || 'A';
+        });
+
+        // Calculate percentage based on actual session days
+        const presentDays = sessionDates.filter(date => student.attendance[date.day] === 'P').length;
+        const percentage = ((presentDays / sessionDates.length) * 100).toFixed(2);
+        row.getCell(sessionDates.length + 3).value = `${percentage}%`;
+      });
+
+    // Style the worksheet
+    worksheet.eachRow((row, rowNumber) => {
+      row.eachCell(cell => {
+        cell.alignment = { horizontal: 'center' };
+        cell.border = {
+          top: { style: 'thin' },
+          left: { style: 'thin' },
+          bottom: { style: 'thin' },
+          right: { style: 'thin' }
+        };
+      });
+    });
+
+    // Adjust column widths for date columns
+    sessionDates.forEach((_, index) => {
+      worksheet.getColumn(index + 3).width = 12; // Width for date columns
+    });
+
+    // Generate buffer and send response
+    const buffer = await workbook.xlsx.writeBuffer();
+
+    console.log('Sending Excel file:', {
+      filename: `attendance_${course.courseCode}_${startDate}_to_${endDate}.xlsx`,
+      size: buffer.length
+    });
+
+    // Set response headers
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader(
+      'Content-Disposition', 
+      `attachment; filename=attendance_${course.courseCode}_${startDate}_to_${endDate}.xlsx`
+    );
+
+    // Send the file
+    return res.send(buffer);
+
+  } catch (error) {
+    console.error('Error in range report:', error);
+    return res.status(500).json({ error: error.message });
   }
 });
 
