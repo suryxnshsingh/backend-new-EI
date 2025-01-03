@@ -411,16 +411,34 @@ router.get('/attendance/:id/student/:studentId', authenticateUser, async (req, r
 router.get('/students/:studentId/courses/:courseId/attendance', authenticateUser, async (req, res) => {
     const { studentId, courseId } = req.params;
     try {
-        const attendanceRecords = await prisma.attendanceResponse.findMany({
+        // Get all attendance sessions for this course
+        const allSessions = await prisma.attendance.findMany({
             where: {
-                studentId: parseInt(studentId),
-                attendance: {
-                    courseId: parseInt(courseId),
-                },
+                courseId: parseInt(courseId),
+                isActive: false // Only get completed sessions
             },
-            include: { attendance: true },
+            include: {
+                responses: {
+                    where: {
+                        studentId: parseInt(studentId)
+                    }
+                }
+            },
+            orderBy: {
+                date: 'desc'
+            }
         });
-        res.json(attendanceRecords);
+
+        // Format the response to include attendance status
+        const formattedSessions = allSessions.map(session => ({
+            id: session.id,
+            date: session.date,
+            status: session.responses.length > 0 ? 'Present' : 'Absent',
+            courseName: session.courseName,
+            courseCode: session.courseCode
+        }));
+
+        res.json(formattedSessions);
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -571,6 +589,390 @@ router.get('/attendance/:id/summary', authenticateUser, async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+// Get all attendance history for a student
+router.get('/students/:studentId/attendance-history', authenticateUser, async (req, res) => {
+    const { studentId } = req.params;
+    console.log('Fetching attendance history for student:', studentId);
+    
+    try {
+        // 1. First verify the student exists
+        const student = await prisma.student.findFirst({
+            where: { userId: parseInt(studentId) }
+        });
+
+        if (!student) {
+            console.log('Student not found for userId:', studentId);
+            return res.status(404).json({ error: 'Student not found' });
+        }
+
+        console.log('Found student:', student.id);
+
+        // 2. Get all courses the student is enrolled in
+        const enrollments = await prisma.enrollment.findMany({
+            where: {
+                studentId: student.id,
+                status: 'ACCEPTED'
+            },
+            include: {
+                course: true
+            }
+        });
+        
+        console.log('Enrollments:', {
+            count: enrollments.length,
+            courses: enrollments.map(e => ({
+                id: e.courseId,
+                name: e.course.name,
+                code: e.course.courseCode
+            }))
+        });
+
+        if (enrollments.length === 0) {
+            return res.json([]);
+        }
+
+        // 3. Get all attendance sessions from these courses
+        const attendanceSessions = await prisma.attendance.findMany({
+            where: {
+                courseId: {
+                    in: enrollments.map(e => e.courseId)
+                },
+                isActive: false
+            },
+            include: {
+                course: true
+            }
+        });
+
+        console.log('Attendance sessions found:', attendanceSessions.length);
+
+        if (attendanceSessions.length === 0) {
+            return res.json([]);
+        }
+
+        // 4. Get student's responses for these sessions
+        const responses = await prisma.attendanceResponse.findMany({
+            where: {
+                studentId: student.id,
+                attendanceId: {
+                    in: attendanceSessions.map(s => s.id)
+                }
+            }
+        });
+
+        console.log('Student responses found:', responses.length);
+
+        // 5. Create a map of responses for quick lookup
+        const responseMap = new Map(
+            responses.map(r => [r.attendanceId, r])
+        );
+
+        // 6. Format all sessions with present/absent status
+        const formattedRecords = attendanceSessions.map(session => ({
+            date: session.date,
+            courseName: session.course.name,
+            courseCode: session.course.courseCode,
+            status: responseMap.has(session.id) ? 'Present' : 'Absent'
+        }));
+
+        console.log('Final formatted records:', {
+            total: formattedRecords.length,
+            present: formattedRecords.filter(r => r.status === 'Present').length,
+            absent: formattedRecords.filter(r => r.status === 'Absent').length
+        });
+
+        res.json(formattedRecords);
+    } catch (err) {
+        console.error('Error in attendance history:', err);
+        res.status(500).json({ error: 'Failed to fetch attendance history' });
+    }
+});
+
+// DEBUG route - remove in production
+router.get('/debug/student/:studentId', authenticateUser, async (req, res) => {
+    const { studentId } = req.params;
+    try {
+        const debug = {
+            enrollments: await prisma.enrollment.findMany({
+                where: { studentId: parseInt(studentId) }
+            }),
+            attendanceSessions: await prisma.attendance.findMany({
+                where: { 
+                    courseId: {
+                        in: (await prisma.enrollment.findMany({
+                            where: { studentId: parseInt(studentId) }
+                        })).map(e => e.courseId)
+                    }
+                }
+            }),
+            responses: await prisma.attendanceResponse.findMany({
+                where: { studentId: parseInt(studentId) }
+            })
+        };
+        res.json(debug);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Add this route to your attendance.js
+router.get('/student-monthly-report', authenticateUser, async (req, res) => {
+  try {
+    const { session, semester, month, year } = req.query;
+    
+    console.log('Auth user:', req.user);
+
+    // First get the user's student profile
+    const student = await prisma.student.findFirst({
+      where: {
+        user: {
+          id: req.user.userId
+        }
+      },
+      include: {
+        user: true,
+        enrollments: {
+          where: {
+            status: 'ACCEPTED',
+            course: {
+              session: session,
+              semester: semester.toString()
+            }
+          },
+          include: {
+            course: true
+          }
+        }
+      }
+    });
+
+    if (!student) {
+      console.log('Student not found for userId:', req.user.userId);
+      throw new Error(`Student not found for user ID ${req.user.userId}`);
+    }
+
+    console.log('Found student:', {
+      id: student.id,
+      userId: student.user.id,
+      name: `${student.user.firstName} ${student.user.lastName}`,
+      enrollmentNumber: student.enrollmentNumber,
+      enrollments: student.enrollments.map(e => ({
+        courseId: e.courseId,
+        courseName: e.course.name,
+        courseCode: e.course.courseCode
+      }))
+    });
+
+    // 2. Calculate date range
+    const monthNum = parseInt(month);
+    const yearNum = parseInt(year);
+    const daysInMonth = new Date(yearNum, monthNum, 0).getDate();
+
+    const startDate = new Date(yearNum, monthNum - 1, 1);
+    const endDate = new Date(yearNum, monthNum - 1, daysInMonth);
+    startDate.setHours(0, 0, 0, 0);
+    endDate.setHours(23, 59, 59, 999);
+
+    console.log('Date range:', { startDate, endDate });
+
+    // 3. Get all attendance sessions first
+    const attendanceSessions = await prisma.attendance.findMany({
+      where: {
+        courseId: {
+          in: student.enrollments.map(e => e.courseId)
+        },
+        date: {
+          gte: startDate.toISOString(),
+          lte: endDate.toISOString()
+        },
+        isActive: false
+      },
+      include: {
+        responses: {
+          where: {
+            studentId: student.id
+          }
+        },
+        course: true
+      }
+    });
+
+    console.log('Found attendance sessions:', attendanceSessions.length);
+
+    // 4. Process attendance data
+    const courseAttendance = new Map();
+    
+    attendanceSessions.forEach(session => {
+      if (!courseAttendance.has(session.courseId)) {
+        courseAttendance.set(session.courseId, {
+          courseCode: session.course.courseCode,
+          courseName: session.course.name,
+          sessions: [],
+          totalSessions: 0,
+          presentCount: 0
+        });
+      }
+
+      const courseData = courseAttendance.get(session.courseId);
+      courseData.totalSessions++;
+      const isPresent = session.responses.length > 0;
+      if (isPresent) courseData.presentCount++;
+
+      // Convert string date to Date object before getting date
+      const sessionDate = new Date(session.date);
+      courseData.sessions.push({
+        date: sessionDate.getDate(),
+        status: isPresent ? 'P' : 'A'
+      });
+
+      console.log('Processed session:', {
+        courseCode: session.course.courseCode,
+        date: sessionDate,
+        dayOfMonth: sessionDate.getDate(),
+        isPresent
+      });
+    });
+
+    // 5. Create Excel workbook
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('Attendance Report');
+
+    // 6. Set up columns with proper date formatting
+    const dateColumns = Array.from({ length: daysInMonth }, (_, i) => {
+      const date = new Date(yearNum, monthNum - 1, i + 1);
+      return {
+        header: `${String(i + 1).padStart(2, '0')}/${String(monthNum).padStart(2, '0')}/${yearNum}`,
+        key: `day${i + 1}`,
+        width: 12
+      };
+    });
+
+    worksheet.columns = [
+      { header: 'Subject Code', key: 'code', width: 15 },
+      { header: 'Name of Subject', key: 'name', width: 30 },
+      ...dateColumns,
+      { header: 'Percentage', key: 'percentage', width: 12 }
+    ];
+
+    // 7. Add headers
+    worksheet.mergeCells('A1:' + worksheet.getColumn(worksheet.columnCount).letter + '1');
+    const instituteCell = worksheet.getCell('A1');
+    instituteCell.value = 'Department of Electronics and Instrumentation - Shri G. S. Institute of Tech. and Science';
+    instituteCell.alignment = { horizontal: 'center' };
+    instituteCell.font = { bold: true, size: 14 };
+
+    worksheet.mergeCells('A2:' + worksheet.getColumn(worksheet.columnCount).letter + '2');
+    const studentCell = worksheet.getCell('A2');
+    studentCell.value = `Attendance record for ${student.enrollmentNumber} - ${student.user.firstName} ${student.user.lastName} - ${
+      new Date(yearNum, monthNum - 1).toLocaleString('default', { month: 'long' })} - Semester ${semester} - Session ${session}`;
+    studentCell.alignment = { horizontal: 'center' };
+    studentCell.font = { bold: true };
+
+    // Style the column headers (row 3)
+    const headerRow = worksheet.getRow(3);
+    headerRow.values = [
+      'Subject Code',
+      'Name of Subject',
+      ...Array.from({ length: daysInMonth }, (_, i) => 
+        `${String(i + 1).padStart(2, '0')}/${String(monthNum).padStart(2, '0')}/${yearNum}`
+      ),
+      'Percentage'
+    ];
+    
+    headerRow.font = { bold: true };
+    headerRow.alignment = { horizontal: 'center', vertical: 'middle' };
+    
+    // Rotate and style date headers
+    headerRow.eachCell((cell, colNumber) => {
+      if (colNumber > 2 && colNumber < worksheet.columnCount) {  // Skip first two columns and percentage column
+        cell.alignment = { 
+          horizontal: 'center', 
+          vertical: 'middle',
+          textRotation: 45  // Rotate text 45 degrees
+        };
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFE0E0E0' }  // Light gray background
+        };
+      }
+    });
+
+    // 8. Add data rows
+    let totalPercentage = 0;
+    let courseCount = 0;
+
+    for (const [_, data] of courseAttendance) {
+      courseCount++;
+      const percentage = data.totalSessions > 0 
+        ? ((data.presentCount / data.totalSessions) * 100).toFixed(2)
+        : '0.00';
+      totalPercentage += parseFloat(percentage);
+
+      const rowData = {
+        code: data.courseCode,
+        name: data.courseName,
+        percentage: `${percentage}%`
+      };
+
+      // Fill in attendance for each day
+      for (let day = 1; day <= daysInMonth; day++) {
+        const sessionForDay = data.sessions.find(s => s.date === day);
+        rowData[`day${day}`] = sessionForDay ? sessionForDay.status : '-';
+      }
+
+      worksheet.addRow(rowData);
+    }
+
+    // 9. Add average row if there are courses
+    if (courseCount > 0) {
+      const averageRow = worksheet.addRow({
+        code: '',
+        name: 'Average Percentage',
+        percentage: `${(totalPercentage / courseCount).toFixed(2)}%`
+      });
+      averageRow.font = { bold: true };
+    }
+
+    // 10. Style the worksheet
+    worksheet.eachRow((row, rowNumber) => {
+      row.eachCell(cell => {
+        cell.alignment = { horizontal: 'center' };
+        cell.border = {
+          top: { style: 'thin' },
+          left: { style: 'thin' },
+          bottom: { style: 'thin' },
+          right: { style: 'thin' }
+        };
+      });
+    });
+
+    // 11. Send the file
+    const buffer = await workbook.xlsx.writeBuffer();
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename=attendance_${session}_sem${semester}_${month}.xlsx`);
+    res.send(buffer);
+
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({
+      error: 'Failed to generate report',
+      message: error.message
+    });
+  }
+});
+
+// Helper array for month names
+const months = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December'
+];
+
+// Add this route to your attendance.js
+router.get('/health', (req, res) => {
+  res.json({ status: 'ok' });
 });
 
 export default router;

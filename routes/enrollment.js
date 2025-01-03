@@ -203,6 +203,7 @@ router.get('/enrollments/my-courses', authenticateUser, async (req, res) => {
       include: {
         course: {
           select: {
+            id: true,
             name: true,
             courseCode: true,
             session: true,
@@ -213,6 +214,14 @@ router.get('/enrollments/my-courses', authenticateUser, async (req, res) => {
                 lastName: true
               }
             }
+          }
+        },
+        student: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            enrollmentNumber: true
           }
         }
       }
@@ -239,6 +248,25 @@ router.get('/enrollments/my-courses', authenticateUser, async (req, res) => {
       details: error.message,
       code: error.code
     });
+  }
+});
+
+// Get student profile
+router.get('/student-profile', authenticateUser, async (req, res) => {
+  try {
+    const student = await prisma.student.findFirst({
+      where: {
+        userId: parseInt(req.user.id)
+      }
+    });
+
+    if (!student) {
+      return res.status(404).json({ error: 'Student not found' });
+    }
+
+    res.json(student);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
