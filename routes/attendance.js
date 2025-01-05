@@ -885,13 +885,25 @@ router.get('/students/:studentId/attendance-history', authenticateUser, async (r
             status: responseMap.has(session.id) ? 'Present' : 'Absent'
         }));
 
+        // 7. Calculate attendance stats
+        const totalClasses = formattedRecords.length;
+        const totalPresent = formattedRecords.filter(record => record.status === 'Present').length;
+        const percentage = totalClasses ? ((totalPresent / totalClasses) * 100).toFixed(2) : 0;
+
         console.log('Final formatted records:', {
             total: formattedRecords.length,
             present: formattedRecords.filter(r => r.status === 'Present').length,
             absent: formattedRecords.filter(r => r.status === 'Absent').length
         });
 
-        res.json(formattedRecords);
+        res.json({
+            records: formattedRecords,
+            stats: {
+                totalClasses,
+                totalPresent,
+                percentage
+            }
+        });
     } catch (err) {
         console.error('Error in attendance history:', err);
         res.status(500).json({ error: 'Failed to fetch attendance history' });
