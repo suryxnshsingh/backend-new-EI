@@ -36,6 +36,8 @@ model User {
   ResetToken ResetToken?
 
   @@map("users")
+  Quiz Quiz[]
+  QuizAttempt QuizAttempt[]
 }
 
 model Student {
@@ -52,7 +54,6 @@ model Student {
 
   // Many-to-many relation with courses
   enrollments           Enrollment[]
-  quizResponses         QuizResponse[]
   responses             AttendanceResponse[]
   assignmentSubmissions AssignmentSubmission[]
 
@@ -127,69 +128,83 @@ model Course {
 }
 
 // Quiz System -----------------------------------------------------------------------------------------
+// Question Types Enum
+enum QuestionType {
+  SINGLE_MCQ
+  MULTI_MCQ
+  NUMERICAL
+  DESCRIPTIVE
+  SIMULATOR  // For future simulator integration
+}
+// Base Models
 model Quiz {
-  id            Int            @id @default(autoincrement())
-  quizTitle     String?        @map("quiz_title")
-  isActive      Boolean?       @map("is_active")
-  totalMarks    Float?         @map("total_marks")
-  noOfQuestions Int?           @map("no_of_questions")
-  quizTime      Int?           @map("quiz_time")
-  createdAt     DateTime       @default(now()) @map("created_at")
-  updatedAt     DateTime       @updatedAt @map("updated_at")
-  
-  // Relation fields
-  courseId      Int            @map("course_id")
-  teacherId     Int            @map("teacher_id")
-  course        Course         @relation(fields: [courseId], references: [id])
-  teacher       Teacher        @relation(fields: [teacherId], references: [id])
-  
-  // Quiz related relations
-  questions     QuizQuestion[]
-  responses     QuizResponse[]
+  id          String      @id @default(uuid())
+  title       String
+  description String?
+  timeLimit   Int?       // in minutes
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  isActive    Boolean    @default(true)
+  questions   Question[]
+  attempts    QuizAttempt[]
+  createdBy   User       @relation(fields: [userId], references: [id])
+  userId      Int
 
-  @@map("quizzes")
+  Course Course[]
+
+  Teacher Teacher[]
 }
-
-model QuizQuestion {
-  id                Int      @id @default(autoincrement())
-  questionId        Int      @map("question_id")
-  questionTitle     String?  @map("question_title")
-  questionType      String   @map("question_type")
-  option1           String?  @map("option_1")
-  option2           String?  @map("option_2")
-  option3           String?  @map("option_3")
-  option4           String?  @map("option_4")
-  correctOption     Int?     @map("correct_option")
-  textualQuesMarks  Float?   @map("textual_ques_marks")
-  minChar           Int?     @map("min_char")
-  keywords          String[]
-  
-  referenceImage   String?  @map("reference_image")       // URL or path to the image
-  imageCaption     String?  @map("image_caption")        // Optional caption for the image
-  
-  // Relation fields
-  quizId          Int      @map("quiz_id")
-  quiz            Quiz     @relation(fields: [quizId], references: [id])
-
-  @@unique([quizId, questionId])
-  @@map("quiz_questions")
+model Question {
+  id              String        @id @default(uuid())
+  quizId          String
+  quiz            Quiz          @relation(fields: [quizId], references: [id])
+  type            QuestionType
+  text            String
+  marks          Float
+  imageUrl        String?      // For question images
+  options         Option[]     // For MCQ types
+  correctAnswer   String?      // For NUMERICAL type
+  tolerance       Float?       // For NUMERICAL type (acceptable margin of error)
+  answers         Answer[]     // Student answers
+  order          Int          // Question order in quiz
+  metadata        Json?        // Flexible field for future extensions (simulator configs etc.)
 }
-
-model QuizResponse {
-  id                Int      @id @default(autoincrement())
-  studentName       String?  @map("student_name")
-  noOfQuestions     Int?     @map("no_of_questions")
-  questionsAttempted Int?    @map("questions_attempted")
-  totalMarks        Float?   @map("total_marks")
-  marksObtained     Float?   @map("marks_obtained")
-  
-  // Relation fields
-  quizId           Int      @map("quiz_id")
-  studentId        Int      @map("student_id")
-  quiz             Quiz     @relation(fields: [quizId], references: [id])
-  student          Student  @relation(fields: [studentId], references: [id])
-
-  @@map("quiz_responses")
+model Option {
+  id          String    @id @default(uuid())
+  questionId  String
+  question    Question  @relation(fields: [questionId], references: [id])
+  text        String
+  isCorrect   Boolean   // For MCQ types
+  imageUrl    String?   // For image-based options
+}
+model Answer {
+  id          String      @id @default(uuid())
+  questionId  String
+  question    Question    @relation(fields: [questionId], references: [id])
+  attemptId   String
+  attempt     QuizAttempt @relation(fields: [attemptId], references: [id])
+  selectedOptions String[] // For MCQ types (store option IDs)
+  textAnswer   String?    // For DESCRIPTIVE/NUMERICAL types
+  isCorrect    Boolean?   // Can be null for DESCRIPTIVE
+  score        Float?     // Marks obtained
+  metadata     Json?      // For future extensions (simulator answers etc.)
+}
+model QuizAttempt {
+  id          String    @id @default(uuid())
+  quizId      String
+  quiz        Quiz      @relation(fields: [quizId], references: [id])
+  userId      Int
+  user        User      @relation(fields: [userId], references: [id])
+  startedAt   DateTime  @default(now())
+  submittedAt DateTime?
+  answers     Answer[]
+  score       Float?
+  status      AttemptStatus @default(IN_PROGRESS)
+}
+enum AttemptStatus {
+  IN_PROGRESS
+  SUBMITTED
+  EVALUATED
 }
 
 // Attendance System ---------------------------------------------------------------------------
