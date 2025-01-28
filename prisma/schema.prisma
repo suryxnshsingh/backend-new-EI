@@ -154,25 +154,39 @@ model QuizQuestion {
   id                Int      @id @default(autoincrement())
   questionId        Int      @map("question_id")
   questionTitle     String?  @map("question_title")
-  questionType      String   @map("question_type")
-  option1           String?  @map("option_1")
-  option2           String?  @map("option_2")
-  option3           String?  @map("option_3")
-  option4           String?  @map("option_4")
-  correctOption     Int?     @map("correct_option")
-  textualQuesMarks  Float?   @map("textual_ques_marks")
-  minChar           Int?     @map("min_char")
-  keywords          String[]
+  questionType      QuestionType @map("question_type")
+  maxMarks          Float?   @map("max_marks")
+  referenceImage    String?  @map("reference_image")
+  imageCaption      String?  @map("image_caption")
   
-  referenceImage   String?  @map("reference_image")       // URL or path to the image
-  imageCaption     String?  @map("image_caption")        // Optional caption for the image
-  
+  // New fields for numerical questions
+  numericalAnswer   Float?   @map("numerical_answer")     // The correct numerical answer
+  toleranceLower    Float?   @map("tolerance_lower")      // Lower bound of acceptable range
+  toleranceUpper    Float?   @map("tolerance_upper")      // Upper bound of acceptable range
+
   // Relation fields
-  quizId          Int      @map("quiz_id")
-  quiz            Quiz     @relation(fields: [quizId], references: [id])
+  quizId           Int      @map("quiz_id")
+  quiz             Quiz     @relation(fields: [quizId], references: [id])
+
+  // Question options (for MCQ types)
+  options          QuizOption[]
+  answers          QuizAnswer[]
 
   @@unique([quizId, questionId])
   @@map("quiz_questions")
+}
+
+model QuizOption {
+  id                Int      @id @default(autoincrement())
+  optionText        String?  @map("option_text")
+  optionImage       String?  @map("option_image")        // URL or path to the option image
+  isCorrect         Boolean  @map("is_correct")          // For single or multi-correct MCQs
+
+  // Relation fields
+  questionId        Int      @map("question_id")
+  question          QuizQuestion @relation(fields: [questionId], references: [id])
+
+  @@map("quiz_options")
 }
 
 model QuizResponse {
@@ -182,6 +196,9 @@ model QuizResponse {
   questionsAttempted Int?    @map("questions_attempted")
   totalMarks        Float?   @map("total_marks")
   marksObtained     Float?   @map("marks_obtained")
+
+  // Response to each question
+  answers           QuizAnswer[]
   
   // Relation fields
   quizId           Int      @map("quiz_id")
@@ -190,6 +207,34 @@ model QuizResponse {
   student          Student  @relation(fields: [studentId], references: [id])
 
   @@map("quiz_responses")
+}
+
+model QuizAnswer {
+  id                Int      @id @default(autoincrement())
+  answerText        String?  @map("answer_text")         // For descriptive answers
+  selectedOptions   Int[]    @map("selected_options")    // Array for selected options (for multi-correct MCQs)
+  answerImage       String?  @map("answer_image")        // URL or path to the answer image
+  numericalAnswer   Float?   @map("numerical_answer")    // For numerical type questions
+
+  // Marks given manually for descriptive questions
+  marksAwarded      Float?   @map("marks_awarded")       // To store marks after teacher evaluation
+  
+  // Relation fields
+  responseId        Int      @map("response_id")
+  questionId        Int      @map("question_id")
+  response          QuizResponse @relation(fields: [responseId], references: [id])
+  question          QuizQuestion @relation(fields: [questionId], references: [id])
+
+  @@map("quiz_answers")
+}
+
+// ENUM for Question Type
+enum QuestionType {
+  SINGLE_CORRECT    // Single-correct MCQ
+  MULTI_CORRECT     // Multi-correct MCQ
+  DESCRIPTIVE       // Descriptive question (manual evaluation)
+  SIMULATOR         // Simulator-based question
+  NUMERICAL         // Numerical question with tolerance range
 }
 
 // Attendance System ---------------------------------------------------------------------------
