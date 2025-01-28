@@ -36,6 +36,8 @@ model User {
   ResetToken ResetToken?
 
   @@map("users")
+  Quiz Quiz[]
+  QuizAttempt QuizAttempt[]
 }
 
 model Student {
@@ -52,7 +54,6 @@ model Student {
 
   // Many-to-many relation with courses
   enrollments           Enrollment[]
-  quizResponses         QuizResponse[]
   responses             AttendanceResponse[]
   assignmentSubmissions AssignmentSubmission[]
 
@@ -127,114 +128,83 @@ model Course {
 }
 
 // Quiz System -----------------------------------------------------------------------------------------
-model Quiz {
-  id            Int            @id @default(autoincrement())
-  quizTitle     String?        @map("quiz_title")
-  isActive      Boolean?       @map("is_active")
-  totalMarks    Float?         @map("total_marks")
-  noOfQuestions Int?           @map("no_of_questions")
-  quizTime      Int?           @map("quiz_time")
-  createdAt     DateTime       @default(now()) @map("created_at")
-  updatedAt     DateTime       @updatedAt @map("updated_at")
-  
-  // Relation fields
-  courseId      Int            @map("course_id")
-  teacherId     Int            @map("teacher_id")
-  course        Course         @relation(fields: [courseId], references: [id])
-  teacher       Teacher        @relation(fields: [teacherId], references: [id])
-  
-  // Quiz related relations
-  questions     QuizQuestion[]
-  responses     QuizResponse[]
-
-  @@map("quizzes")
-}
-
-model QuizQuestion {
-  id                Int      @id @default(autoincrement())
-  questionId        Int      @map("question_id")
-  questionTitle     String?  @map("question_title")
-  questionType      QuestionType @map("question_type")
-  maxMarks          Float?   @map("max_marks")
-  referenceImage    String?  @map("reference_image")
-  imageCaption      String?  @map("image_caption")
-  
-  // New fields for numerical questions
-  numericalAnswer   Float?   @map("numerical_answer")     // The correct numerical answer
-  toleranceLower    Float?   @map("tolerance_lower")      // Lower bound of acceptable range
-  toleranceUpper    Float?   @map("tolerance_upper")      // Upper bound of acceptable range
-
-  // Relation fields
-  quizId           Int      @map("quiz_id")
-  quiz             Quiz     @relation(fields: [quizId], references: [id])
-
-  // Question options (for MCQ types)
-  options          QuizOption[]
-  answers          QuizAnswer[]
-
-  @@unique([quizId, questionId])
-  @@map("quiz_questions")
-}
-
-model QuizOption {
-  id                Int      @id @default(autoincrement())
-  optionText        String?  @map("option_text")
-  optionImage       String?  @map("option_image")        // URL or path to the option image
-  isCorrect         Boolean  @map("is_correct")          // For single or multi-correct MCQs
-
-  // Relation fields
-  questionId        Int      @map("question_id")
-  question          QuizQuestion @relation(fields: [questionId], references: [id])
-
-  @@map("quiz_options")
-}
-
-model QuizResponse {
-  id                Int      @id @default(autoincrement())
-  studentName       String?  @map("student_name")
-  noOfQuestions     Int?     @map("no_of_questions")
-  questionsAttempted Int?    @map("questions_attempted")
-  totalMarks        Float?   @map("total_marks")
-  marksObtained     Float?   @map("marks_obtained")
-
-  // Response to each question
-  answers           QuizAnswer[]
-  
-  // Relation fields
-  quizId           Int      @map("quiz_id")
-  studentId        Int      @map("student_id")
-  quiz             Quiz     @relation(fields: [quizId], references: [id])
-  student          Student  @relation(fields: [studentId], references: [id])
-
-  @@map("quiz_responses")
-}
-
-model QuizAnswer {
-  id                Int      @id @default(autoincrement())
-  answerText        String?  @map("answer_text")         // For descriptive answers
-  selectedOptions   Int[]    @map("selected_options")    // Array for selected options (for multi-correct MCQs)
-  answerImage       String?  @map("answer_image")        // URL or path to the answer image
-  numericalAnswer   Float?   @map("numerical_answer")    // For numerical type questions
-
-  // Marks given manually for descriptive questions
-  marksAwarded      Float?   @map("marks_awarded")       // To store marks after teacher evaluation
-  
-  // Relation fields
-  responseId        Int      @map("response_id")
-  questionId        Int      @map("question_id")
-  response          QuizResponse @relation(fields: [responseId], references: [id])
-  question          QuizQuestion @relation(fields: [questionId], references: [id])
-
-  @@map("quiz_answers")
-}
-
-// ENUM for Question Type
+// Question Types Enum
 enum QuestionType {
-  SINGLE_CORRECT    // Single-correct MCQ
-  MULTI_CORRECT     // Multi-correct MCQ
-  DESCRIPTIVE       // Descriptive question (manual evaluation)
-  SIMULATOR         // Simulator-based question
-  NUMERICAL         // Numerical question with tolerance range
+  SINGLE_MCQ
+  MULTI_MCQ
+  NUMERICAL
+  DESCRIPTIVE
+  SIMULATOR  // For future simulator integration
+}
+// Base Models
+model Quiz {
+  id          String      @id @default(uuid())
+  title       String
+  description String?
+  timeLimit   Int?       // in minutes
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  isActive    Boolean    @default(true)
+  questions   Question[]
+  attempts    QuizAttempt[]
+  createdBy   User       @relation(fields: [userId], references: [id])
+  userId      Int
+
+  Course Course[]
+
+  Teacher Teacher[]
+}
+model Question {
+  id              String        @id @default(uuid())
+  quizId          String
+  quiz            Quiz          @relation(fields: [quizId], references: [id])
+  type            QuestionType
+  text            String
+  marks          Float
+  imageUrl        String?      // For question images
+  options         Option[]     // For MCQ types
+  correctAnswer   String?      // For NUMERICAL type
+  tolerance       Float?       // For NUMERICAL type (acceptable margin of error)
+  answers         Answer[]     // Student answers
+  order          Int          // Question order in quiz
+  metadata        Json?        // Flexible field for future extensions (simulator configs etc.)
+}
+model Option {
+  id          String    @id @default(uuid())
+  questionId  String
+  question    Question  @relation(fields: [questionId], references: [id])
+  text        String
+  isCorrect   Boolean   // For MCQ types
+  imageUrl    String?   // For image-based options
+}
+model Answer {
+  id          String      @id @default(uuid())
+  questionId  String
+  question    Question    @relation(fields: [questionId], references: [id])
+  attemptId   String
+  attempt     QuizAttempt @relation(fields: [attemptId], references: [id])
+  selectedOptions String[] // For MCQ types (store option IDs)
+  textAnswer   String?    // For DESCRIPTIVE/NUMERICAL types
+  isCorrect    Boolean?   // Can be null for DESCRIPTIVE
+  score        Float?     // Marks obtained
+  metadata     Json?      // For future extensions (simulator answers etc.)
+}
+model QuizAttempt {
+  id          String    @id @default(uuid())
+  quizId      String
+  quiz        Quiz      @relation(fields: [quizId], references: [id])
+  userId      Int
+  user        User      @relation(fields: [userId], references: [id])
+  startedAt   DateTime  @default(now())
+  submittedAt DateTime?
+  answers     Answer[]
+  score       Float?
+  status      AttemptStatus @default(IN_PROGRESS)
+}
+enum AttemptStatus {
+  IN_PROGRESS
+  SUBMITTED
+  EVALUATED
 }
 
 // Attendance System ---------------------------------------------------------------------------
