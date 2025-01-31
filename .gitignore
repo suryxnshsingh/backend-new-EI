@@ -1,3 +1,4 @@
 node_modules/
 .env
 migration_lock.toml
+uploads/

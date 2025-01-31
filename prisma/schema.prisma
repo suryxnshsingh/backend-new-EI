@@ -241,38 +241,39 @@ model AttendanceResponse {
 
 // Assignment System -----------------------------------------------------------------------------------------
 model Assignment {
-  id            Int       @id @default(autoincrement())
-  courseId      Int       @map("course_id")
-  title         String
-  description   String
-  dueDate       String?   @map("due_date")
-  maxMarks      Float?    @map("max_marks")
-  isAssignment  Boolean   @map("is_assignment")
-  file          Bytes?
-  createdAt     DateTime  @default(now()) @map("created_at")
-  updatedAt     DateTime  @updatedAt @map("updated_at")
+  id                Int       @id @default(autoincrement())
+  courseId          Int       @map("course_id")
+  title             String
+  description       String
+  dueDate           DateTime  @map("due_date")                    // Changed to DateTime for proper timestamp comparison
+  maxMarks          Float?    @map("max_marks")
+  fileUrl           String?   @map("file_url")                    // Store file URL instead of bytes
+  acceptingSubmissions Boolean @default(true) @map("accepting_submissions")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
 
   // Relations
-  course        Course    @relation(fields: [courseId], references: [id])
-  submissions   AssignmentSubmission[]
+  course            Course    @relation(fields: [courseId], references: [id])
+  submissions       AssignmentSubmission[]
 
   @@map("assignments")
 }
 
 model AssignmentSubmission {
-  id            Int       @id @default(autoincrement())
-  assignmentId  Int       @map("assignment_id")
-  studentId     Int       @map("student_id")
-  submissionDate DateTime @default(now()) @map("submission_date")
-  file          Bytes?
-  marksObtained Float?    @map("marks_obtained")
-  feedback      String?
+  id              Int       @id @default(autoincrement())
+  assignmentId    Int       @map("assignment_id")
+  studentId       Int       @map("student_id")
+  submissionDate  DateTime  @default(now()) @map("submission_date")
+  fileUrl         String?   @map("file_url")                    // Store file URL instead of bytes
+  note            String?                                       // Added optional note field
+  isLate          Boolean   @default(false) @map("is_late")    // Added late submission flag
   
   // Relations
-  assignment    Assignment @relation(fields: [assignmentId], references: [id])
-  student       Student    @relation(fields: [studentId], references: [id])
+  assignment      Assignment @relation(fields: [assignmentId], references: [id])
+  student         Student    @relation(fields: [studentId], references: [id])
 
   @@map("assignment_submissions")
+  @@unique([assignmentId, studentId])                          // Prevent multiple submissions per student
 }
 
 // CO -----------------------------------------------------------------------------------------
