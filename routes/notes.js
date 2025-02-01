@@ -1,16 +1,29 @@
 import express from 'express';
 import { PrismaClient } from '@prisma/client';
+import multer from 'multer';
 const router = express.Router();
 const prisma = new PrismaClient();
 import { authenticateUser, authorizeTeacher } from '../middlewares/auth.js';
 
+const upload = multer({ storage: multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, 'uploads/');
+  },
+  filename: function (req, file, cb) {
+    cb(null, Date.now() + '-' + file.originalname);
+  }
+}) });
+
 // Create a new note
-router.post('/notes', authenticateUser, authorizeTeacher, async (req, res) => {
-  const { courseId, title, description, fileUrl } = req.body;
+router.post('/notes', authenticateUser, authorizeTeacher, upload.single('file'), async (req, res) => {
+  const { courseId, title, description } = req.body;
+  const fileUrl = req.file ? req.file.path : null;
   try {
+    console.log('Received form data:', req.body);
+    console.log('Creating note with data:', { courseId, title, description, fileUrl });
     const note = await prisma.notes.create({
       data: {
-        courseId,
+        courseId: parseInt(courseId),
         title,
         description,
         fileUrl,
@@ -19,6 +32,7 @@ router.post('/notes', authenticateUser, authorizeTeacher, async (req, res) => {
     });
     res.status(201).json(note);
   } catch (error) {
+    console.error('Error creating note:', error);
     res.status(500).json({ error: 'Failed to create note' });
   }
 });
