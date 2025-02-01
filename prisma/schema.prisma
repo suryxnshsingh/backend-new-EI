@@ -122,6 +122,7 @@ model Course {
   quizzes     Quiz[]
   attendance  Attendance[]
   assignments Assignment[]
+  notes       Notes[]
   co          CO[]
 
   @@map("courses")
@@ -311,3 +312,17 @@ model ResetToken {
   @@map("reset_tokens")
 }
 
+// Notes -----------------------------------------------------------------------------------------
+model Notes {
+  id                Int       @id @default(autoincrement())
+  courseId          Int       @map("course_id")
+  title             String
+  description       String
+  fileUrl           String?   @map("file_url")
+  createdAt         DateTime  @default(now()) @map("created_at")
+
+  // Relations
+  course            Course    @relation(fields: [courseId], references: [id])
+
+  @@map("notes")
+}
