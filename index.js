@@ -6,6 +6,7 @@ import enrollmentRoutes from './routes/enrollment.js';
 import coRoutes from './routes/co.js';
 import attendanceRoutes from './routes/attendance.js';
 import assignmentRoutes from './routes/assignment.js';
+import notesRoutes from './routes/notes.js';
 import quizroutes from './routes/quiz.js';
 
 const app = express();
@@ -33,6 +34,7 @@ app.use('/api/courses', courseRoutes);
 app.use('/api/enrollment', enrollmentRoutes);
 app.use('/api/attendance', attendanceRoutes);
 app.use('/api/assignment', assignmentRoutes);
+app.use('/api/notes', notesRoutes);
 app.use('/api/co', coRoutes);
 app.use('/api/quiz', quizroutes);
 
