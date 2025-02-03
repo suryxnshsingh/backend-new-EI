@@ -41,18 +41,16 @@ model User {
 }
 
 model Student {
-  id                    Int      @id @default(autoincrement())
-  firstName             String   @map("first_name")
-  lastName              String   @map("last_name")
-
-  // Optional field
-  enrollmentNumber      String?  @map("enrollment_number")
-
+  id               Int      @id @default(autoincrement())
+  firstName        String   @map("first_name")
+  lastName         String   @map("last_name")
+  enrollmentNumber String?  @map("enrollment_number")
+  
+  // Foreign key to the User model (ensure this matches the cookie value)
+  userId           Int      @unique @map("user_id")
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
   // Relation fields
-  userId                Int      @unique @map("user_id")
-  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  // Many-to-many relation with courses
   enrollments           Enrollment[]
   responses             AttendanceResponse[]
   assignmentSubmissions AssignmentSubmission[]

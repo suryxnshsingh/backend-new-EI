@@ -1,18 +1,42 @@
 import express from 'express';
-import { PrismaClient } from '@prisma/client';
 import multer from 'multer';
-const router = express.Router();
-const prisma = new PrismaClient();
+import path from 'path';
+import fs from 'fs';
+import { fileURLToPath } from 'url';
+import { PrismaClient } from '@prisma/client';
 import { authenticateUser, authorizeTeacher } from '../middlewares/auth.js';
 
-const upload = multer({ storage: multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, 'uploads/');
-  },
-  filename: function (req, file, cb) {
-    cb(null, Date.now() + '-' + file.originalname);
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const prisma = new PrismaClient();
+const router = express.Router();
+
+// Set up upload directory
+const uploadDir = 'uploads/notes';
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true });
+}
+
+// Configure multer
+const storage = multer.diskStorage({
+  destination: uploadDir,
+  filename: (req, file, cb) => cb(null, `${Date.now()}-${file.originalname}`)
+});
+const upload = multer({ storage });
+
+// Simple file download endpoint
+router.get('/download/:filename', (req, res) => {
+  try {
+    const filePath = path.join(process.cwd(), uploadDir, req.params.filename);
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).send('File not found');
+    }
+    res.download(filePath);
+  } catch (error) {
+    console.error('Download error:', error);
+    res.status(500).send('Error downloading file');
   }
-}) });
+});
 
 // Create a new note
 router.post('/notes', authenticateUser, authorizeTeacher, upload.single('file'), async (req, res) => {
