@@ -1,26 +1,67 @@
 import express from 'express';
 import multer from 'multer';
 import path from 'path';
+import fs from 'fs';
+import { fileURLToPath } from 'url';
 import { PrismaClient } from '@prisma/client';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 const prisma = new PrismaClient();
 const router = express.Router();
 
-// Multer setup for file uploads
+// Set up upload directory
+const uploadDir = 'uploads/assignment';
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true });
+}
+
+// Set up submissions upload directory
+const submissionUploadDir = 'uploads/submissions';
+if (!fs.existsSync(submissionUploadDir)) {
+  fs.mkdirSync(submissionUploadDir, { recursive: true });
+}
+
+// Configure multer
 const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, 'uploads/assignment/'); // Specify the destination directory
-  },
-  filename: function (req, file, cb) {
-    cb(null, Date.now() + '-' + file.originalname); // Specify the file name
+  destination: uploadDir,
+  filename: (req, file, cb) => cb(null, `${Date.now()}-${file.originalname}`)
+});
+const upload = multer({ storage });
+
+// Configure multer for submission files
+const submissionStorage = multer.diskStorage({
+  destination: submissionUploadDir,
+  filename: (req, file, cb) => cb(null, `${Date.now()}-${file.originalname}`)
+});
+const uploadSubmission = multer({ storage: submissionStorage });
+
+// Simple file download endpoint
+router.get('/download/:filename', (req, res) => {
+  try {
+    const filePath = path.join(process.cwd(), uploadDir, req.params.filename);
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).send('File not found');
+    }
+    res.download(filePath);
+  } catch (error) {
+    console.error('Download error:', error);
+    res.status(500).send('Error downloading file');
   }
 });
-const upload = multer({ storage: storage });
 
-// Serve uploaded files
-router.get('/uploads/:filename', (req, res) => {
-  const { filename } = req.params;
-  const filePath = path.join(__dirname, '..', 'uploads', 'assignment', filename);
-  res.sendFile(filePath);
+// New: Endpoint for downloading submission files
+router.get('/download/submission/:filename', (req, res) => {
+  try {
+    const filePath = path.join(process.cwd(), submissionUploadDir, req.params.filename);
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).send('File not found');
+    }
+    res.download(filePath);
+  } catch (error) {
+    console.error('Download submission error:', error);
+    res.status(500).send('Error downloading submission file');
+  }
 });
 
 // Create a new assignment
@@ -46,14 +87,28 @@ router.post('/create', upload.single('file'), async (req, res) => {
   }
 });
 
-// Get assignments for a specific course
+// Get assignments for a specific course including the current student's submission (if any)
 router.get('/course/:courseId', async (req, res) => {
   const { courseId } = req.params;
-
+  const { studentId } = req.query; // now expecting studentId as the logged-in User's id
+  if (!studentId) {
+    return res.status(400).json({ error: 'Student ID query parameter is required.' });
+  }
+  const parsedUserId = parseInt(studentId, 10);
+  if (isNaN(parsedUserId)) {
+    return res.status(400).json({ error: 'Invalid Student ID.' });
+  }
   try {
     const assignments = await prisma.assignment.findMany({
-      where: { courseId: parseInt(courseId) }
+      where: { courseId: parseInt(courseId, 10) },
+      include: {
+        submissions: {
+          // Use nested where filter to check the submission's student's userId.
+          where: { student: { userId: parsedUserId } }
+        }
+      }
     });
+    console.log('Assignments returned:', assignments.map(a => a.submissions.length));
     res.status(200).json(assignments);
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch assignments' });
@@ -169,23 +224,55 @@ router.put('/toggle-submissions/:id', async (req, res) => {
 });
 
 // Student submits an assignment
-router.post('/submit', upload.single('file'), async (req, res) => {
+router.post('/submit', uploadSubmission.single('file'), async (req, res) => {
   const { assignmentId, studentId, note } = req.body;
-  const fileUrl = req.file ? `uploads/assignment/${req.file.filename}` : null;
-
+  if (!req.file) { 
+    return res.status(400).json({ error: 'Submission file is required.' });
+  }
+  if (!studentId) { 
+    return res.status(400).json({ error: 'Student ID is required.' });
+  }
+  console.log('Received studentId (User ID):', studentId, typeof studentId);
+  const parsedUserId = parseInt(studentId, 10);
+  if (isNaN(parsedUserId)) {
+    return res.status(400).json({ error: 'Invalid student ID.' });
+  }
+  // Look up the student record based on the User id
+  const studentRecord = await prisma.student.findUnique({
+    where: { userId: parsedUserId }
+  });
+  if (!studentRecord) {
+    return res.status(400).json({ error: 'Invalid student ID.' });
+  }
+  const fileUrl = `uploads/submissions/${req.file.filename}`;
   try {
-    const submission = await prisma.assignmentSubmission.create({
-      data: {
-        assignmentId: parseInt(assignmentId),
-        studentId: parseInt(studentId),
+    const assignmentRecord = await prisma.assignment.findUnique({
+      where: { id: parseInt(assignmentId) }
+    });
+    if (!assignmentRecord) {
+      return res.status(404).json({ error: 'Assignment not found' });
+    }
+    // Upsert submission so duplicates update instead of failing the unique constraint
+    const submission = await prisma.assignmentSubmission.upsert({
+      where: { assignmentId_studentId: { assignmentId: parseInt(assignmentId), studentId: studentRecord.id } },
+      update: {
         fileUrl,
         note,
-        isLate: new Date() > new Date((await prisma.assignment.findUnique({ where: { id: parseInt(assignmentId) } })).dueDate)
+        submissionDate: new Date(),
+        isLate: new Date() > new Date(assignmentRecord.dueDate)
+      },
+      create: {
+        assignmentId: parseInt(assignmentId),
+        studentId: studentRecord.id,
+        fileUrl,
+        note,
+        isLate: new Date() > new Date(assignmentRecord.dueDate)
       }
     });
-    res.status(201).json(submission);
+    res.status(201).json({ message: 'Submission successful', submission });
   } catch (error) {
-    res.status(500).json({ error: 'Failed to submit assignment' });
+    console.error('Submission error:', error);
+    res.status(500).json({ error: error.message });
   }
 });
 
