@@ -7,6 +7,8 @@ import coRoutes from './routes/co.js';
 import attendanceRoutes from './routes/attendance.js';
 import assignmentRoutes from './routes/assignment.js';
 import notesRoutes from './routes/notes.js';
+import multer from 'multer';
+import path from 'path';
 
 const app = express();
 
@@ -27,6 +29,19 @@ app.use((req, res, next) => {
   });
   next();
 });
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, 'uploads/');
+  },
+  filename: (req, file, cb) => {
+    cb(null, `${Date.now()}-${file.originalname}`);
+  },
+});
+
+const upload = multer({ storage });
+
+app.use('/uploads', express.static('uploads'));
 
 app.use('/api/auth', authRoutes);
 app.use('/api/courses', courseRoutes);
