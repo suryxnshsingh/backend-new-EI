@@ -162,11 +162,13 @@ model Question {
   marks          Float
   imageUrl        String?      // For question images
   options         Option[]     // For MCQ types
-  correctAnswer   String?      // For NUMERICAL type
+  correctAnswer   Decimal?     // For NUMERICAL type (ensures precision)
   tolerance       Float?       // For NUMERICAL type (acceptable margin of error)
   answers         Answer[]     // Student answers
   order          Int          // Question order in quiz
   metadata        Json?        // Flexible field for future extensions (simulator configs etc.)
+  keywords        String[]    // List of keywords for grading
+  threshold       Float?       // Percentage threshold for full marks
 }
 model Option {
   id          String    @id @default(uuid())
@@ -187,6 +189,7 @@ model Answer {
   isCorrect    Boolean?   // Can be null for DESCRIPTIVE
   score        Float?     // Marks obtained
   metadata     Json?      // For future extensions (simulator answers etc.)
+  keywordMatchPercentage Float? // Percentage of matched keywords
 }
 model QuizAttempt {
   id          String    @id @default(uuid())
