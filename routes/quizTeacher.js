@@ -459,4 +459,32 @@ router.patch('/:quizId/toggle-status', authenticateUser, authorizeTeacher, async
   }
 });
 
+// Update quiz details with proper Course handling
+router.put('/api/quiz/teacher/:id', async (req, res) => {
+  try {
+    const { title, description, timeLimit, courseIds } = req.body;
+    const quiz = await Quiz.findByPk(req.params.id);
+
+    if (!quiz) {
+      return res.status(404).json({ error: 'Quiz not found' });
+    }
+
+    quiz.title = title;
+    quiz.description = description;
+    quiz.timeLimit = timeLimit;
+
+    if (courseIds && Array.isArray(courseIds)) {
+      const courses = await Course.findAll({ where: { id: courseIds } });
+      await quiz.setCourses(courses);
+    }
+
+    await quiz.save();
+    const updatedQuiz = await Quiz.findByPk(req.params.id, { include: [Course] });
+    res.json(updatedQuiz);
+  } catch (error) {
+    console.error('Failed to update quiz:', error);
+    res.status(500).json({ error: 'Failed to update quiz' });
+  }
+});
+
 export default router;
