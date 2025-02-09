@@ -93,7 +93,9 @@ router.get('/teacher-courses', authenticateUser, async (req, res) => {
       const teacher = await prisma.teacher.findUnique({
         where: { userId: userId }
       });
-
+      
+      console.log("Teacher fetched:", teacher);
+      
       if (!teacher) {
         return res.status(404).json({ message: 'Teacher profile not found' });
       }
@@ -101,7 +103,7 @@ router.get('/teacher-courses', authenticateUser, async (req, res) => {
       // Then find courses using teacher's ID
       const courses = await prisma.course.findMany({
         where: {
-          teacherId: teacher.id  // Use teacher.id instead of userId
+          teacherId: teacher.id
         },
         include: {
           teacher: {
@@ -116,6 +118,7 @@ router.get('/teacher-courses', authenticateUser, async (req, res) => {
         }
       });
       
+      console.log("Courses fetched count:", courses.length);
       res.json(courses);
     } catch (error) {
       console.error('Detailed error:', {

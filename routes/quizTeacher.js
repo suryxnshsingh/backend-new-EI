@@ -34,30 +34,55 @@ const upload = multer({
 router.post('/', authenticateUser, authorizeTeacher, async (req, res) => {
   try {
     const { title, description, timeLimit, courseIds } = req.body;
-    const userId = req.user.id;
+    
+    // Get user ID directly from the token payload as it was working before
+    const userId = req.user.userId || req.user.id; // Support both formats
+    console.log('Creating quiz for user:', userId);
+
+    if (!userId) {
+      return res.status(401).json({ error: 'User not authenticated' });
+    }
+
+    // Find teacher with userId
+    const teacher = await prisma.teacher.findFirst({
+      where: {
+        userId: parseInt(userId)
+      }
+    });
+
+    console.log('Found teacher:', teacher);
+
+    if (!teacher) {
+      return res.status(404).json({ error: 'Teacher record not found' });
+    }
 
     const quiz = await prisma.quiz.create({
       data: {
         title,
-        description,
-        timeLimit,
-        userId,
-        isActive: false, // Setting default status to inactive
+        description: description || '',
+        timeLimit: Number(timeLimit),
+        isActive: false,
+        userId: parseInt(userId), // Use userId directly as before
         Course: {
-          connect: courseIds.map(id => ({ id: parseInt(id) }))
+          connect: courseIds.map(id => ({ id: Number(id) }))
         },
         Teacher: {
-          connect: {
-            userId
-          }
+          connect: [{ id: teacher.id }]
         }
+      },
+      include: {
+        Course: true,
+        Teacher: true
       }
     });
 
     res.status(201).json(quiz);
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: 'Failed to create quiz' });
+    console.error('Error creating quiz:', error);
+    res.status(500).json({ 
+      error: 'Failed to create quiz',
+      details: error.message
+    });
   }
 });
 
@@ -277,7 +302,7 @@ router.get('/my-quizzes', authenticateUser, authorizeTeacher, async (req, res) =
       where: {
         Teacher: {
           some: {
-            userId: req.user.id
+            userId: req.user.userId || req.user.id
           }
         }
       },
@@ -287,7 +312,8 @@ router.get('/my-quizzes', authenticateUser, authorizeTeacher, async (req, res) =
             options: true
           }
         },
-        Course: true
+        Course: true, // This ensures courses are included
+        Teacher: true
       }
     });
     res.json(quizzes);

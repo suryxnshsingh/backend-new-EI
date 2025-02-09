@@ -51,7 +51,8 @@ app.use('/api/enrollment', enrollmentRoutes);
 app.use('/api/attendance', attendanceRoutes);
 app.use('/api/assignment', assignmentRoutes);
 app.use('/api/notes', notesRoutes);
-app.use('/api/quiz', quizStudentRoutes, quizTeacherRoutes);
+app.use('/api/quiz/student', quizStudentRoutes);
+app.use('/api/quiz/teacher', quizTeacherRoutes);
 app.use('/api/co', coRoutes);
 
 const PORT = process.env.PORT || 8080;

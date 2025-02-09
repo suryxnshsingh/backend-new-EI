@@ -176,7 +176,6 @@ model Option {
   question    Question  @relation(fields: [questionId], references: [id])
   text        String
   isCorrect   Boolean   // For MCQ types
-  imageUrl    String?   // For image-based options
 }
 model Answer {
   id          String      @id @default(uuid())
