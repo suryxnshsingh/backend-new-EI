@@ -1,5 +1,6 @@
 import express from 'express';
 import { PrismaClient } from '@prisma/client';
+import { Decimal } from '@prisma/client/runtime/library.js';  // Fixed import path
 import { authenticateUser, authorizeTeacher } from '../middlewares/auth.js';
 import multer from 'multer';
 import path from 'path';
@@ -170,26 +171,53 @@ router.post('/:quizId/questions', authenticateUser, authorizeTeacher, upload.sin
     const quizId = req.params.quizId;
     const imageUrl = req.file ? `/uploads/quiz-images/${req.file.filename}` : null;
 
+    // Parse options if it exists
+    let parsedOptions = [];
+    if (options) {
+      try {
+        parsedOptions = typeof options === 'string' ? JSON.parse(options) : options;
+      } catch (error) {
+        console.error('Error parsing options:', error);
+      }
+    }
+
+    // Parse keywords if it exists
+    let parsedKeywords = [];
+    if (keywords) {
+      try {
+        parsedKeywords = typeof keywords === 'string' ? JSON.parse(keywords) : keywords;
+      } catch (error) {
+        console.error('Error parsing keywords:', error);
+      }
+    }
+
+    // Create question data object with correct types
+    const questionData = {
+      quizId,
+      type,
+      text,
+      marks: parseFloat(marks),
+      imageUrl,
+      correctAnswer: type === 'NUMERICAL' ? new Decimal(correctAnswer || 0) : null,
+      tolerance: tolerance ? parseFloat(tolerance) : null,
+      threshold: threshold ? parseFloat(threshold) : null,
+      keywords: parsedKeywords,
+      order: parseInt(order || 0),
+      metadata: {}
+    };
+
+    // Add options for MCQ types
+    if (type.includes('MCQ') && parsedOptions.length > 0) {
+      questionData.options = {
+        create: parsedOptions.map(opt => ({
+          text: opt.text,
+          isCorrect: opt.isCorrect
+        }))
+      };
+    }
+
     const question = await prisma.question.create({
-      data: {
-        quizId,
-        type,
-        text,
-        marks: parseFloat(marks),
-        imageUrl,
-        correctAnswer: type === 'NUMERICAL' ? parseFloat(correctAnswer) : null,
-        tolerance: tolerance ? parseFloat(tolerance) : null,
-        keywords: keywords ? JSON.parse(keywords) : [],
-        threshold: threshold ? parseFloat(threshold) : null,
-        order: parseInt(order),
-        options: type.includes('MCQ') ? {
-          create: JSON.parse(options).map(opt => ({
-            text: opt.text,
-            isCorrect: opt.isCorrect,
-            imageUrl: opt.imageUrl
-          }))
-        } : undefined
-      },
+      data: questionData,
       include: {
         options: true
       }
@@ -197,8 +225,11 @@ router.post('/:quizId/questions', authenticateUser, authorizeTeacher, upload.sin
 
     res.status(201).json(question);
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: 'Failed to add question' });
+    console.error('Error adding question:', error);
+    res.status(500).json({ 
+      error: 'Failed to add question',
+      details: error.message
+    });
   }
 });
 
@@ -221,17 +252,34 @@ router.delete('/:quizId/questions/:questionId', authenticateUser, authorizeTeach
       return res.status(404).json({ error: 'Quiz not found or unauthorized' });
     }
 
-    // Delete the question
-    await prisma.question.delete({
-      where: {
-        id: req.params.questionId,
-        quizId: req.params.quizId
-      }
+    // Delete options first, then the question using a transaction
+    await prisma.$transaction(async (tx) => {
+      // Delete associated options
+      await tx.option.deleteMany({
+        where: {
+          questionId: req.params.questionId
+        }
+      });
+
+      // Delete associated answers if any
+      await tx.answer.deleteMany({
+        where: {
+          questionId: req.params.questionId
+        }
+      });
+
+      // Delete the question
+      await tx.question.delete({
+        where: {
+          id: req.params.questionId,
+          quizId: req.params.quizId
+        }
+      });
     });
 
     res.json({ message: 'Question deleted successfully' });
   } catch (error) {
-    console.error(error);
+    console.error('Error deleting question:', error);
     res.status(500).json({ error: 'Failed to delete question' });
   }
 });
@@ -320,6 +368,40 @@ router.get('/my-quizzes', authenticateUser, authorizeTeacher, async (req, res) =
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Failed to fetch quizzes' });
+  }
+});
+
+// Get a specific quiz by ID
+router.get('/quiz/:id', authenticateUser, authorizeTeacher, async (req, res) => {
+  try {
+    const quiz = await prisma.quiz.findFirst({
+      where: {
+        id: req.params.id,
+        Teacher: {
+          some: {
+            userId: req.user.userId || req.user.id
+          }
+        }
+      },
+      include: {
+        questions: {
+          include: {
+            options: true
+          }
+        },
+        Course: true,
+        Teacher: true
+      }
+    });
+
+    if (!quiz) {
+      return res.status(404).json({ error: 'Quiz not found or unauthorized' });
+    }
+
+    res.json(quiz);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to fetch quiz' });
   }
 });
 
