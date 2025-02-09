@@ -65,34 +65,24 @@ router.get('/:quizId', authenticateUser, async (req, res) => {
       return res.status(400).json({ error: 'Quiz already attempted' });
     }
 
+    const quizId = parseInt(req.params.quizId);
     const quiz = await prisma.quiz.findUnique({
-      where: {
-        id: req.params.quizId,
-        isActive: true
-      },
+      where: { id: quizId },
       include: {
-        questions: {
-          include: {
-            options: {
-              select: {
-                id: true,
-                text: true,
-                imageUrl: true
-              }
-            }
-          }
-        }
+        questions: true,
+        Course: true
       }
     });
 
-    if (!quiz) {
+    // Check if quiz exists and is active
+    if (!quiz || !quiz.isActive) {
       return res.status(404).json({ error: 'Quiz not found or not active' });
     }
 
     res.json(quiz);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Failed to fetch quiz' });
+    res.status(500).json({ error: 'Failed to fetch quiz details' });
   }
 });
 

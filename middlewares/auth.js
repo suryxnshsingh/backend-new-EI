@@ -20,14 +20,11 @@ const authenticateUser = async (req, res, next) => {
 
 const authorizeTeacher = async (req, res, next) => {
   try {
-    const { id, firstName, lastName } = req.user;
+    const { userId } = req.user;
 
-    // Find the teacher profile using the user's first and last name 
-    const teacher = await prisma.teacher.findFirst({
-      where: {
-        firstName,
-        lastName
-      }
+    // Find the teacher profile using the user's userId
+    const teacher = await prisma.teacher.findUnique({
+      where: { userId }
     });
 
     if (!teacher) {
