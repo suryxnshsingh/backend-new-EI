@@ -203,18 +203,14 @@ router.post('/:quizId/questions', authenticateUser, authorizeTeacher, upload.sin
       threshold: threshold ? parseFloat(threshold) : null,
       keywords: parsedKeywords,
       order: parseInt(order || 0),
-      metadata: {}
-    };
-
-    // Add options for MCQ types
-    if (type.includes('MCQ') && parsedOptions.length > 0) {
-      questionData.options = {
+      metadata: {},
+      options: type.includes('MCQ') && parsedOptions.length > 0 ? {
         create: parsedOptions.map(opt => ({
           text: opt.text,
           isCorrect: opt.isCorrect
         }))
-      };
-    }
+      } : undefined
+    };
 
     const question = await prisma.question.create({
       data: questionData,
@@ -326,8 +322,7 @@ router.put('/:quizId/questions/:questionId', authenticateUser, authorizeTeacher,
           deleteMany: {}, // Delete existing options
           create: JSON.parse(options).map(opt => ({
             text: opt.text,
-            isCorrect: opt.isCorrect,
-            imageUrl: opt.imageUrl
+            isCorrect: opt.isCorrect
           }))
         } : undefined
       },
@@ -461,6 +456,34 @@ router.patch('/:quizId/toggle-status', authenticateUser, authorizeTeacher, async
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Failed to toggle quiz status' });
+  }
+});
+
+// Update quiz details with proper Course handling
+router.put('/api/quiz/teacher/:id', async (req, res) => {
+  try {
+    const { title, description, timeLimit, courseIds } = req.body;
+    const quiz = await Quiz.findByPk(req.params.id);
+
+    if (!quiz) {
+      return res.status(404).json({ error: 'Quiz not found' });
+    }
+
+    quiz.title = title;
+    quiz.description = description;
+    quiz.timeLimit = timeLimit;
+
+    if (courseIds && Array.isArray(courseIds)) {
+      const courses = await Course.findAll({ where: { id: courseIds } });
+      await quiz.setCourses(courses);
+    }
+
+    await quiz.save();
+    const updatedQuiz = await Quiz.findByPk(req.params.id, { include: [Course] });
+    res.json(updatedQuiz);
+  } catch (error) {
+    console.error('Failed to update quiz:', error);
+    res.status(500).json({ error: 'Failed to update quiz' });
   }
 });
 
