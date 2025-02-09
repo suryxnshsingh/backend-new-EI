@@ -203,18 +203,14 @@ router.post('/:quizId/questions', authenticateUser, authorizeTeacher, upload.sin
       threshold: threshold ? parseFloat(threshold) : null,
       keywords: parsedKeywords,
       order: parseInt(order || 0),
-      metadata: {}
-    };
-
-    // Add options for MCQ types
-    if (type.includes('MCQ') && parsedOptions.length > 0) {
-      questionData.options = {
+      metadata: {},
+      options: type.includes('MCQ') && parsedOptions.length > 0 ? {
         create: parsedOptions.map(opt => ({
           text: opt.text,
           isCorrect: opt.isCorrect
         }))
-      };
-    }
+      } : undefined
+    };
 
     const question = await prisma.question.create({
       data: questionData,
@@ -326,8 +322,7 @@ router.put('/:quizId/questions/:questionId', authenticateUser, authorizeTeacher,
           deleteMany: {}, // Delete existing options
           create: JSON.parse(options).map(opt => ({
             text: opt.text,
-            isCorrect: opt.isCorrect,
-            imageUrl: opt.imageUrl
+            isCorrect: opt.isCorrect
           }))
         } : undefined
       },
