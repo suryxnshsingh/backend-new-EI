@@ -34,7 +34,7 @@ const upload = multer({
 // Create a new quiz
 router.post('/', authenticateUser, authorizeTeacher, async (req, res) => {
   try {
-    const { title, description, timeLimit, courseIds } = req.body;
+    const { title, description, timeLimit, courseIds, maxMarks } = req.body;
     
     // Get user ID directly from the token payload as it was working before
     const userId = req.user.userId || req.user.id; // Support both formats
@@ -64,6 +64,7 @@ router.post('/', authenticateUser, authorizeTeacher, async (req, res) => {
         timeLimit: Number(timeLimit),
         isActive: false,
         userId: parseInt(userId), // Use userId directly as before
+        maxMarks: maxMarks ? parseFloat(maxMarks) : null,
         Course: {
           connect: courseIds.map(id => ({ id: Number(id) }))
         },
@@ -123,7 +124,7 @@ router.delete('/:quizId', authenticateUser, authorizeTeacher, async (req, res) =
 // Update quiz details
 router.put('/:quizId', authenticateUser, authorizeTeacher, async (req, res) => {
   try {
-    const { title, description, timeLimit, courseIds } = req.body;
+    const { title, description, timeLimit, courseIds, maxMarks } = req.body;
     
     // Verify the quiz belongs to the teacher
     const existingQuiz = await prisma.quiz.findFirst({
@@ -150,6 +151,7 @@ router.put('/:quizId', authenticateUser, authorizeTeacher, async (req, res) => {
         title,
         description,
         timeLimit,
+        maxMarks: maxMarks ? parseFloat(maxMarks) : null,
         Course: {
           set: [], // Remove existing connections
           connect: courseIds.map(id => ({ id: parseInt(id) })) // Add new connections

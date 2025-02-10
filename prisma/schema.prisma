@@ -148,6 +148,7 @@ model Quiz {
   attempts    QuizAttempt[]
   createdBy   User       @relation(fields: [userId], references: [id])
   userId      Int
+  maxMarks    Float?
 
   Course Course[]
 
