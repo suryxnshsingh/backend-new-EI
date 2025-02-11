@@ -319,10 +319,11 @@ router.post('/:quizId/submit', authenticateUser, async (req, res) => {
             break;
 
           case 'DESCRIPTIVE':
-            // Handle descriptive scoring based on keywords
-            const matchCount = question.keywords.filter(keyword => 
+            // Fix: Calculate matchCount inside the case
+            const matchedKeywords = question.keywords.filter(keyword => 
               answer.textAnswer.toLowerCase().includes(keyword.toLowerCase())
-            ).length;
+            );
+            const matchCount = matchedKeywords.length;
             const matchPercentage = (matchCount / question.keywords.length) * 100;
             score = (matchPercentage >= (question.threshold || 0)) ? 
               question.marks * (matchPercentage / 100) : 0;
