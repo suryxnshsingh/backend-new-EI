@@ -33,7 +33,7 @@ const upload = multer({
 // Create a new quiz
 router.post('/', authenticateUser, authorizeTeacher, async (req, res) => {
   try {
-    const { title, description, timeLimit, courseIds } = req.body;
+    const { title, description, timeLimit, courseIds, maxMarks, scheduledFor } = req.body;
     
     // Get user ID directly from the token payload as it was working before
     const userId = req.user.userId || req.user.id; // Support both formats
@@ -61,6 +61,8 @@ router.post('/', authenticateUser, authorizeTeacher, async (req, res) => {
         title,
         description: description || '',
         timeLimit: Number(timeLimit),
+        maxMarks: Number(maxMarks),              // new: save maxMarks
+        scheduledFor: scheduledFor ? new Date(scheduledFor) : null, // new: save scheduledFor
         isActive: false,
         userId: parseInt(userId), // Use userId directly as before
         Course: {
@@ -87,34 +89,20 @@ router.post('/', authenticateUser, authorizeTeacher, async (req, res) => {
 });
 
 // Delete a quiz
-router.delete('/:quizId', authenticateUser, authorizeTeacher, async (req, res) => {
+router.delete('/:quizId', async (req, res) => {
   try {
-    // Verify the quiz belongs to the teacher
-    const quiz = await prisma.quiz.findFirst({
-      where: {
-        id: req.params.quizId,
-        Teacher: {
-          some: {
-            userId: req.user.id
-          }
-        }
-      }
+    const quizId = req.params.quizId; // Use quizId as a UUID string
+    // Delete all dependent questions first
+    await prisma.question.deleteMany({
+      where: { quizId }
     });
-
-    if (!quiz) {
-      return res.status(404).json({ error: 'Quiz not found or unauthorized' });
-    }
-
-    // Delete the quiz and all related data (cascading delete will handle related records)
-    await prisma.quiz.delete({
-      where: {
-        id: req.params.quizId
-      }
+    // Delete the quiz
+    const deletedQuiz = await prisma.quiz.delete({
+      where: { id: quizId }
     });
-
-    res.json({ message: 'Quiz deleted successfully' });
+    res.json({ message: 'Quiz and associated questions deleted successfully', quiz: deletedQuiz });
   } catch (error) {
-    console.error(error);
+    console.error('Error deleting quiz:', error);
     res.status(500).json({ error: 'Failed to delete quiz' });
   }
 });
@@ -122,7 +110,8 @@ router.delete('/:quizId', authenticateUser, authorizeTeacher, async (req, res) =
 // Update quiz details
 router.put('/:quizId', authenticateUser, authorizeTeacher, async (req, res) => {
   try {
-    const { title, description, timeLimit, courseIds } = req.body;
+    // Include maxMarks and scheduledFor here
+    const { title, description, timeLimit, courseIds, maxMarks, scheduledFor } = req.body;
     
     // Verify the quiz belongs to the teacher
     const existingQuiz = await prisma.quiz.findFirst({
@@ -140,18 +129,17 @@ router.put('/:quizId', authenticateUser, authorizeTeacher, async (req, res) => {
       return res.status(404).json({ error: 'Quiz not found or unauthorized' });
     }
 
-    // Update quiz details
     const updatedQuiz = await prisma.quiz.update({
-      where: {
-        id: req.params.quizId
-      },
+      where: { id: req.params.quizId },
       data: {
         title,
         description,
-        timeLimit,
+        timeLimit: Number(timeLimit),
+        maxMarks: maxMarks !== undefined ? Number(maxMarks) : undefined,
+        scheduledFor: scheduledFor ? new Date(scheduledFor) : null,
         Course: {
           set: [], // Remove existing connections
-          connect: courseIds.map(id => ({ id: parseInt(id) })) // Add new connections
+          connect: courseIds.map(id => ({ id: Number(id) }))
         }
       }
     });
@@ -320,6 +308,28 @@ router.get('/my-quizzes', authenticateUser, authorizeTeacher, async (req, res) =
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Failed to fetch quizzes' });
+  }
+});
+
+// Get a single quiz created by the teacher, including questions and course details
+router.get('/my-quizzes/:quizId', authenticateUser, authorizeTeacher, async (req, res) => {
+  try {
+    const quizId = req.params.quizId; // Use quizId as a string (UUID)
+    const quiz = await prisma.quiz.findUnique({
+      where: { id: quizId },
+      include: {
+        questions: true,
+        Course: true,
+        Teacher: true
+      }
+    });
+    if (!quiz) {
+      return res.status(404).json({ error: "Quiz not found" });
+    }
+    res.json(quiz);
+  } catch (error) {
+    console.error('Error fetching quiz:', error);
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
