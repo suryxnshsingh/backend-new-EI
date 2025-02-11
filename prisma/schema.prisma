@@ -137,10 +137,11 @@ enum QuestionType {
 }
 // Base Models
 model Quiz {
-  id          String      @id @default(uuid())
+  id          String    @id @default(uuid())  // Changed to String with UUID
   title       String
   description String?
   timeLimit   Int?       // in minutes
+  scheduledFor DateTime?  // New field for quiz schedule
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
   isActive    Boolean    @default(true)
@@ -156,8 +157,8 @@ model Quiz {
 }
 model Question {
   id              String        @id @default(uuid())
-  quizId          String
-  quiz            Quiz          @relation(fields: [quizId], references: [id])
+  quizId          String       // Changed to String to match Quiz.id
+  quiz            Quiz         @relation(fields: [quizId], references: [id], onDelete: Cascade)
   type            QuestionType
   text            String
   marks          Float
@@ -174,14 +175,14 @@ model Question {
 model Option {
   id          String    @id @default(uuid())
   questionId  String
-  question    Question  @relation(fields: [questionId], references: [id])
+  question    Question  @relation(fields: [questionId], references: [id], onDelete: Cascade)
   text        String
   isCorrect   Boolean   // For MCQ types
 }
 model Answer {
   id          String      @id @default(uuid())
   questionId  String
-  question    Question    @relation(fields: [questionId], references: [id])
+  question    Question    @relation(fields: [questionId], references: [id], onDelete: Cascade)
   attemptId   String
   attempt     QuizAttempt @relation(fields: [attemptId], references: [id])
   selectedOptions String[] // For MCQ types (store option IDs)
@@ -193,8 +194,8 @@ model Answer {
 }
 model QuizAttempt {
   id          String    @id @default(uuid())
-  quizId      String
-  quiz        Quiz      @relation(fields: [quizId], references: [id])
+  quizId      String    
+  quiz        Quiz      @relation(fields: [quizId], references: [id], onDelete: Cascade) // Added onDelete: Cascade
   userId      Int
   user        User      @relation(fields: [userId], references: [id])
   startedAt   DateTime  @default(now())
