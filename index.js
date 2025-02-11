@@ -12,6 +12,7 @@ import notesRoutes from './routes/notes.js';
 import quizStudentRoutes from './routes/quizStudent.js';
 import quizTeacherRoutes from './routes/quizTeacher.js';
 
+
 const app = express();
 
 app.use(express.json());
@@ -28,7 +29,7 @@ app.use((req, res, next) => {
     url: req.url,
     originalUrl: req.originalUrl,
     path: req.path
-  });
+  }, '\n\n----------------------------------\n\n');
   next();
 });
 

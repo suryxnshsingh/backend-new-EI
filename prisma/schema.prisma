@@ -137,10 +137,11 @@ enum QuestionType {
 }
 // Base Models
 model Quiz {
-  id          String      @id @default(uuid())
+  id          String    @id @default(uuid())  // Changed to String with UUID
   title       String
   description String?
   timeLimit   Int?       // in minutes
+  scheduledFor DateTime?  // New field for quiz schedule
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
   isActive    Boolean    @default(true)
@@ -156,8 +157,8 @@ model Quiz {
 }
 model Question {
   id              String        @id @default(uuid())
-  quizId          String
-  quiz            Quiz          @relation(fields: [quizId], references: [id])
+  quizId          String       // Changed to String to match Quiz.id
+  quiz            Quiz         @relation(fields: [quizId], references: [id])
   type            QuestionType
   text            String
   marks          Float
@@ -193,7 +194,7 @@ model Answer {
 }
 model QuizAttempt {
   id          String    @id @default(uuid())
-  quizId      String
+  quizId      String    // Changed to String to match Quiz.id
   quiz        Quiz      @relation(fields: [quizId], references: [id])
   userId      Int
   user        User      @relation(fields: [userId], references: [id])
