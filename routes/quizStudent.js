@@ -159,6 +159,15 @@ router.get('/history', authenticateUser, async (req, res) => {
 // Get available quizzes for student
 router.get('/available', authenticateUser, async (req, res) => {
   try {
+    const userId = req.user?.userId || req.user?.id;
+    
+    if (!userId) {
+      return res.status(401).json({ error: 'User not authenticated' });
+    }
+
+    console.log('Fetching quizzes for user:', userId);
+
+    // Get available quizzes with proper casing for model names
     const quizzes = await prisma.quiz.findMany({
       where: {
         isActive: true,
@@ -166,9 +175,19 @@ router.get('/available', authenticateUser, async (req, res) => {
           some: {
             enrollments: {
               some: {
-                studentId: req.user.studentId,
+                student: {
+                  userId: parseInt(userId)
+                },
                 status: 'ACCEPTED'
               }
+            }
+          }
+        },
+        NOT: {
+          attempts: {
+            some: {
+              userId: parseInt(userId),
+              status: 'SUBMITTED'
             }
           }
         }
@@ -182,10 +201,12 @@ router.get('/available', authenticateUser, async (req, res) => {
         }
       }
     });
+
+    console.log('Found quizzes count:', quizzes.length);
     
     res.json(quizzes);
   } catch (error) {
-    console.error('Error fetching quizzes:', error);
+    console.error('Error in available quizzes:', error);
     res.status(500).json({ error: 'Failed to fetch quizzes' });
   }
 });
