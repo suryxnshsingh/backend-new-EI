@@ -106,7 +106,6 @@ router.get('/history', authenticateUser, async (req, res) => {
             select: {
               title: true,
               maxMarks: true,
-              scheduledFor: true,
               Course: true
             }
           }
@@ -286,6 +285,13 @@ router.post('/:quizId/submit', authenticateUser, async (req, res) => {
       return res.status(404).json({ error: 'Quiz attempt not found' });
     }
 
+    // Ensure matchCount is defined before using it
+    const matchCount = (studentAnswer, correctAnswer) => {
+      // Implement the logic to count matches between studentAnswer and correctAnswer
+      // This is a placeholder implementation, replace with actual logic
+      return studentAnswer === correctAnswer ? 1 : 0;
+    };
+
     // Process each answer
     const processedAnswers = await Promise.all(
       answers.map(async answer => {
@@ -319,7 +325,7 @@ router.post('/:quizId/submit', authenticateUser, async (req, res) => {
             break;
 
           case 'DESCRIPTIVE':
-            // Fix: Calculate matchCount inside the case
+            // Calculate matchCount inside the case
             const matchedKeywords = question.keywords.filter(keyword => 
               answer.textAnswer.toLowerCase().includes(keyword.toLowerCase())
             );
@@ -360,7 +366,7 @@ router.post('/:quizId/submit', authenticateUser, async (req, res) => {
 
     res.json(updatedAttempt);
   } catch (error) {
-    console.error(error);
+    console.error('Error submitting quiz:', error);
     res.status(500).json({ error: 'Failed to submit quiz' });
   }
 });
