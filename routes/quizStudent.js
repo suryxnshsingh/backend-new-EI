@@ -167,19 +167,17 @@ router.get('/available', authenticateUser, async (req, res) => {
 
     console.log('Fetching quizzes for user:', userId);
 
-    // Get available quizzes with proper casing for model names
+    // Updated query with correct casing (course instead of Course)
     const quizzes = await prisma.quiz.findMany({
       where: {
         isActive: true,
-        Course: {
-          some: {
-            enrollments: {
-              some: {
-                student: {
-                  userId: parseInt(userId)
-                },
-                status: 'ACCEPTED'
-              }
+        course: {
+          enrollments: {
+            some: {
+              student: {
+                userId: parseInt(userId)
+              },
+              status: 'ACCEPTED'
             }
           }
         },
@@ -193,7 +191,7 @@ router.get('/available', authenticateUser, async (req, res) => {
         }
       },
       include: {
-        Course: true,
+        course: true,
         Teacher: {
           include: {
             user: true
