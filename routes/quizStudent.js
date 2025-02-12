@@ -285,6 +285,13 @@ router.post('/:quizId/submit', authenticateUser, async (req, res) => {
       return res.status(404).json({ error: 'Quiz attempt not found' });
     }
 
+    // Ensure matchCount is defined before using it
+    const matchCount = (studentAnswer, correctAnswer) => {
+      // Implement the logic to count matches between studentAnswer and correctAnswer
+      // This is a placeholder implementation, replace with actual logic
+      return studentAnswer === correctAnswer ? 1 : 0;
+    };
+
     // Process each answer
     const processedAnswers = await Promise.all(
       answers.map(async answer => {
