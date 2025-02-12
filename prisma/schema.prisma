@@ -151,9 +151,12 @@ model Quiz {
   userId      Int
   maxMarks    Float?
 
-  Course Course[]
+  // Fix the Course relationship
+  courseId    Int      // Add this field
+  course      Course   @relation(fields: [courseId], references: [id]) // Change to single relation
+  Teacher     Teacher[]
 
-  Teacher Teacher[]
+  @@index([courseId])
 }
 model Question {
   id              String        @id @default(uuid())
