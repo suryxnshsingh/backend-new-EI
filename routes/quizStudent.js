@@ -106,7 +106,7 @@ router.get('/history', authenticateUser, async (req, res) => {
             select: {
               title: true,
               maxMarks: true,
-              Course: true
+              course: true // Changed from Course to course
             }
           }
         },
@@ -117,20 +117,18 @@ router.get('/history', authenticateUser, async (req, res) => {
       // Get all quizzes for missed ones
       prisma.quiz.findMany({
         where: {
-          Course: {
-            some: {
-              enrollments: {
-                some: {
-                  student: { userId: parseInt(userId) },
-                  status: 'ACCEPTED'
-                }
+          course: { // Changed from Course to course
+            enrollments: {
+              some: {
+                student: { userId: parseInt(userId) },
+                status: 'ACCEPTED'
               }
             }
           },
           scheduledFor: { lt: now }
         },
         include: {
-          Course: true,
+          course: true, // Changed from Course to course
           attempts: {
             where: {
               userId: parseInt(userId)
@@ -167,7 +165,6 @@ router.get('/available', authenticateUser, async (req, res) => {
 
     console.log('Fetching quizzes for user:', userId);
 
-    // Updated query with correct casing (course instead of Course)
     const quizzes = await prisma.quiz.findMany({
       where: {
         isActive: true,
@@ -192,11 +189,12 @@ router.get('/available', authenticateUser, async (req, res) => {
       },
       include: {
         course: true,
-        Teacher: {
+        teachers: {
           include: {
             user: true
           }
-        }
+        },
+        questions: true // Include to check total questions
       }
     });
 
@@ -215,7 +213,7 @@ router.get('/:quizId', authenticateUser, async (req, res) => {
     // Check if student has already attempted this quiz
     const existingAttempt = await prisma.quizAttempt.findFirst({
       where: {
-        quizId: req.params.quizId, // Remove parseInt since it's a UUID string
+        quizId: req.params.quizId,
         userId: req.user.id,
         status: 'SUBMITTED'
       }
@@ -227,15 +225,23 @@ router.get('/:quizId', authenticateUser, async (req, res) => {
 
     const quiz = await prisma.quiz.findUnique({
       where: { 
-        id: req.params.quizId // Remove parseInt since it's a UUID string
+        id: req.params.quizId
       },
       include: {
         questions: {
           include: {
-            options: true  // Make sure to include options
+            options: true
+          },
+          orderBy: {
+            order: 'asc'
           }
         },
-        Course: true
+        course: true, // Changed from Course to course
+        teachers: {
+          include: {
+            user: true
+          }
+        }
       }
     });
 
@@ -244,7 +250,6 @@ router.get('/:quizId', authenticateUser, async (req, res) => {
       return res.status(404).json({ error: 'Quiz not found or not active' });
     }
 
-    console.log('Quiz data:', JSON.stringify(quiz, null, 2)); // Debug log
     res.json(quiz);
   } catch (error) {
     console.error(error);

@@ -154,7 +154,7 @@ model Quiz {
   // Fix the Course relationship
   courseId    Int      // Add this field
   course      Course   @relation(fields: [courseId], references: [id]) // Change to single relation
-  Teacher     Teacher[]
+  teachers    Teacher[]  // Changed from Teacher to teachers for consistency
 
   @@index([courseId])
 }

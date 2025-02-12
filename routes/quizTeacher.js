@@ -34,23 +34,17 @@ const upload = multer({
 router.post('/', authenticateUser, authorizeTeacher, async (req, res) => {
   try {
     const { title, description, timeLimit, courseIds, maxMarks, scheduledFor } = req.body;
-    
-    // Get user ID directly from the token payload as it was working before
-    const userId = req.user.userId || req.user.id; // Support both formats
-    console.log('Creating quiz for user:', userId);
+    const userId = req.user.userId || req.user.id;
 
     if (!userId) {
       return res.status(401).json({ error: 'User not authenticated' });
     }
 
-    // Find teacher with userId
     const teacher = await prisma.teacher.findFirst({
       where: {
         userId: parseInt(userId)
       }
     });
-
-    console.log('Found teacher:', teacher);
 
     if (!teacher) {
       return res.status(404).json({ error: 'Teacher record not found' });
@@ -61,20 +55,23 @@ router.post('/', authenticateUser, authorizeTeacher, async (req, res) => {
         title,
         description: description || '',
         timeLimit: Number(timeLimit),
-        maxMarks: Number(maxMarks),              // new: save maxMarks
-        scheduledFor: scheduledFor ? new Date(scheduledFor) : null, // new: save scheduledFor
+        maxMarks: Number(maxMarks),
+        scheduledFor: scheduledFor ? new Date(scheduledFor) : null,
         isActive: false,
-        userId: parseInt(userId), // Use userId directly as before
-        Course: {
-          connect: courseIds.map(id => ({ id: Number(id) }))
+        createdBy: {
+          connect: { id: parseInt(userId) }
         },
-        Teacher: {
+        course: {
+          connect: courseIds.map(id => ({ id: Number(id) }))[0] // Connect to single course
+        },
+        teachers: {
           connect: [{ id: teacher.id }]
         }
       },
       include: {
-        Course: true,
-        Teacher: true
+        course: true,
+        teachers: true,
+        createdBy: true
       }
     });
 
@@ -110,14 +107,13 @@ router.delete('/:quizId', async (req, res) => {
 // Update quiz details
 router.put('/:quizId', authenticateUser, authorizeTeacher, async (req, res) => {
   try {
-    // Include maxMarks and scheduledFor here
     const { title, description, timeLimit, courseIds, maxMarks, scheduledFor } = req.body;
     
     // Verify the quiz belongs to the teacher
     const existingQuiz = await prisma.quiz.findFirst({
       where: {
         id: req.params.quizId,
-        Teacher: {
+        teachers: {
           some: {
             userId: req.user.id
           }
@@ -137,10 +133,11 @@ router.put('/:quizId', authenticateUser, authorizeTeacher, async (req, res) => {
         timeLimit: Number(timeLimit),
         maxMarks: maxMarks !== undefined ? Number(maxMarks) : undefined,
         scheduledFor: scheduledFor ? new Date(scheduledFor) : null,
-        Course: {
-          set: [], // Remove existing connections
-          connect: courseIds.map(id => ({ id: Number(id) }))
-        }
+        courseId: courseIds[0] ? parseInt(courseIds[0]) : existingQuiz.courseId // Use first courseId or keep existing
+      },
+      include: {
+        course: true,
+        teachers: true
       }
     });
 
@@ -197,7 +194,7 @@ router.delete('/:quizId/questions/:questionId', authenticateUser, authorizeTeach
     const quiz = await prisma.quiz.findFirst({
       where: {
         id: req.params.quizId,
-        Teacher: {
+        teachers: {
           some: {
             userId: req.user.id
           }
@@ -234,7 +231,7 @@ router.put('/:quizId/questions/:questionId', authenticateUser, authorizeTeacher,
     const quiz = await prisma.quiz.findFirst({
       where: {
         id: req.params.quizId,
-        Teacher: {
+        teachers: {
           some: {
             userId: req.user.id
           }
@@ -288,7 +285,7 @@ router.get('/my-quizzes', authenticateUser, authorizeTeacher, async (req, res) =
   try {
     const quizzes = await prisma.quiz.findMany({
       where: {
-        Teacher: {
+        teachers: {
           some: {
             userId: req.user.userId || req.user.id
           }
@@ -300,8 +297,8 @@ router.get('/my-quizzes', authenticateUser, authorizeTeacher, async (req, res) =
             options: true
           }
         },
-        Course: true, // This ensures courses are included
-        Teacher: true
+        course: true, // This ensures courses are included
+        teachers: true
       }
     });
     res.json(quizzes);
@@ -314,15 +311,28 @@ router.get('/my-quizzes', authenticateUser, authorizeTeacher, async (req, res) =
 // Get a single quiz created by the teacher, including questions and course details
 router.get('/my-quizzes/:quizId', authenticateUser, authorizeTeacher, async (req, res) => {
   try {
-    const quizId = req.params.quizId; // Use quizId as a string (UUID)
+    const quizId = req.params.quizId;
     const quiz = await prisma.quiz.findUnique({
       where: { id: quizId },
       include: {
-        questions: true,
-        Course: true,
-        Teacher: true
+        questions: {
+          include: {
+            options: true  // Include options
+          },
+          orderBy: {
+            order: 'asc'  // Sort questions by order
+          }
+        },
+        course: true,
+        teachers: {
+          include: {
+            user: true
+          }
+        },
+        createdBy: true
       }
     });
+
     if (!quiz) {
       return res.status(404).json({ error: "Quiz not found" });
     }
@@ -330,6 +340,35 @@ router.get('/my-quizzes/:quizId', authenticateUser, authorizeTeacher, async (req
   } catch (error) {
     console.error('Error fetching quiz:', error);
     res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// Get teacher's quizzes
+router.get('/', authenticateUser, async (req, res) => {
+  try {
+    const quizzes = await prisma.quiz.findMany({
+      where: {
+        teachers: {  // Changed from Teacher to teachers
+          some: {
+            userId: parseInt(req.user.id)
+          }
+        }
+      },
+      include: {
+        questions: {
+          include: {
+            options: true
+          }
+        },
+        course: true,    // Changed from Course to course
+        teachers: true   // Changed from Teacher to teachers
+      }
+    });
+
+    res.json(quizzes);
+  } catch (error) {
+    console.error('Error fetching quizzes:', error);
+    res.status(500).json({ error: 'Failed to fetch quizzes' });
   }
 });
 
@@ -363,7 +402,7 @@ router.patch('/:quizId/toggle-status', authenticateUser, authorizeTeacher, async
     const quiz = await prisma.quiz.findFirst({
       where: {
         id: req.params.quizId,
-        Teacher: {
+        teachers: {
           some: {
             userId: req.user.id
           }
