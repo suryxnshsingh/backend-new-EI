@@ -431,4 +431,79 @@ router.patch('/:quizId/toggle-status', authenticateUser, authorizeTeacher, async
   }
 });
 
+// Fetch all responses for a specific quiz
+router.get('/:quizId/responses', authenticateUser, authorizeTeacher, async (req, res) => {
+  try {
+    const responses = await prisma.quizAttempt.findMany({
+      where: {
+        quizId: req.params.quizId,
+        status: {
+          in: ['SUBMITTED', 'EVALUATED'] // Filter for SUBMITTED and EVALUATED statuses
+        }
+      },
+      include: {
+        user: true,
+        answers: {
+          include: {
+            question: {
+              include: {
+                options: true
+              }
+            }
+          }
+        }
+      }
+    });
+
+    // Map the responses to include option text instead of option IDs
+    const mappedResponses = responses.map(response => ({
+      ...response,
+      answers: response.answers.map(answer => ({
+        ...answer,
+        selectedOptionsText: answer.selectedOptions.map(optionId => {
+          const option = answer.question.options.find(opt => opt.id === optionId);
+          return option ? option.text : 'N/A';
+        })
+      }))
+    }));
+
+    res.json(mappedResponses);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to fetch responses' });
+  }
+});
+
+// Update marks for a specific response
+router.put('/:quizId/responses/:responseId', authenticateUser, authorizeTeacher, async (req, res) => {
+  try {
+    const { score, answers } = req.body;
+
+    // Update the marks for each answer
+    await Promise.all(
+      answers.map(async answer => {
+        await prisma.answer.update({
+          where: { id: answer.id },
+          data: { score: parseFloat(answer.score) }
+        });
+      })
+    );
+
+    // Update the overall score for the response
+    const updatedResponse = await prisma.quizAttempt.update({
+      where: {
+        id: req.params.responseId
+      },
+      data: {
+        score: parseFloat(score),
+        status: 'EVALUATED' // Use the correct enum value
+      }
+    });
+    res.json(updatedResponse);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to update marks' });
+  }
+});
+
 export default router;
