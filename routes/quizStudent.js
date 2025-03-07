@@ -210,16 +210,25 @@ router.get('/available', authenticateUser, async (req, res) => {
 // Get a specific quiz with questions
 router.get('/:quizId', authenticateUser, async (req, res) => {
   try {
+    // Get user ID from token, handling both formats
+    const userId = req.user?.userId || req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ error: 'User not authenticated' });
+    }
+    
+    console.log(`Checking quiz access for user ID: ${userId}`);
+
     // Check if student has already attempted this quiz
     const existingAttempt = await prisma.quizAttempt.findFirst({
       where: {
         quizId: req.params.quizId,
-        userId: req.user.id,
+        userId: parseInt(userId),
         status: 'SUBMITTED'
       }
     });
 
     if (existingAttempt) {
+      console.log(`User ${userId} has already submitted this quiz`);
       return res.status(400).json({ error: 'Quiz already attempted' });
     }
 
@@ -265,6 +274,8 @@ router.post('/:quizId/start', authenticateUser, async (req, res) => {
       return res.status(401).json({ error: 'User not authenticated' });
     }
 
+    console.log(`Starting quiz for user ID: ${userId}`);
+
     const attempt = await prisma.quizAttempt.create({
       data: {
         quiz: {
@@ -288,12 +299,15 @@ router.post('/:quizId/start', authenticateUser, async (req, res) => {
 router.post('/:quizId/submit', authenticateUser, async (req, res) => {
   try {
     const { attemptId, answers } = req.body;
+    const userId = req.user?.userId || req.user?.id;
+
+    console.log(`Submitting quiz for user ID: ${userId}, attempt ID: ${attemptId}`);
 
     // Validate attempt exists and belongs to user
     const attempt = await prisma.quizAttempt.findFirst({
       where: {
         id: attemptId,
-        userId: req.user.id,
+        userId: parseInt(userId),
         status: 'IN_PROGRESS'
       },
       include: {
@@ -309,17 +323,23 @@ router.post('/:quizId/submit', authenticateUser, async (req, res) => {
       return res.status(404).json({ error: 'Quiz attempt not found' });
     }
 
-    // Ensure matchCount is defined before using it
-    const matchCount = (studentAnswer, correctAnswer) => {
-      // Implement the logic to count matches between studentAnswer and correctAnswer
-      // This is a placeholder implementation, replace with actual logic
-      return studentAnswer === correctAnswer ? 1 : 0;
+    // Function to count keyword matches
+    const countMatches = (text, keywords) => {
+      if (!text || !keywords || keywords.length === 0) return 0;
+      return keywords.filter(keyword => 
+        text.toLowerCase().includes(keyword.toLowerCase())
+      ).length;
     };
 
     // Process each answer
     const processedAnswers = await Promise.all(
       answers.map(async answer => {
         const question = attempt.quiz.questions.find(q => q.id === answer.questionId);
+        if (!question) {
+          console.log(`Question not found: ${answer.questionId}`);
+          return null;
+        }
+        
         let isCorrect = false;
         let score = 0;
 
@@ -334,29 +354,31 @@ router.post('/:quizId/submit', authenticateUser, async (req, res) => {
               }
             });
             const correctOptionIds = new Set(correctOptions.map(o => o.id));
-            const selectedOptionIds = new Set(answer.selectedOptions);
+            const selectedOptionIds = new Set(answer.selectedOptions || []);
             isCorrect = areArraysEqual(correctOptionIds, selectedOptionIds);
             score = isCorrect ? question.marks : 0;
             break;
 
           case 'NUMERICAL':
             // Handle numerical scoring with tolerance
-            const numAnswer = parseFloat(answer.textAnswer);
-            const correctAnswer = parseFloat(question.correctAnswer.toString());
+            const numAnswer = parseFloat(answer.textAnswer || '0');
+            const correctAnswer = parseFloat(question.correctAnswer?.toString() || '0');
             const tolerance = question.tolerance || 0;
             isCorrect = Math.abs(numAnswer - correctAnswer) <= tolerance;
             score = isCorrect ? question.marks : 0;
             break;
 
           case 'DESCRIPTIVE':
-            // Calculate matchCount inside the case
-            const matchedKeywords = question.keywords.filter(keyword => 
-              answer.textAnswer.toLowerCase().includes(keyword.toLowerCase())
-            );
-            const matchCount = matchedKeywords.length;
-            const matchPercentage = (matchCount / question.keywords.length) * 100;
+            // Calculate keyword matches
+            const matchedCount = countMatches(answer.textAnswer, question.keywords || []);
+            const totalKeywords = (question.keywords || []).length;
+            const matchPercentage = totalKeywords > 0 ? (matchedCount / totalKeywords) * 100 : 0;
             score = (matchPercentage >= (question.threshold || 0)) ? 
-              question.marks * (matchPercentage / 100) : 0;
+              (question.marks * (matchPercentage / 100)) : 0;
+            break;
+            
+          default:
+            console.log(`Unknown question type: ${question.type}`);
             break;
         }
 
@@ -365,18 +387,19 @@ router.post('/:quizId/submit', authenticateUser, async (req, res) => {
             questionId: answer.questionId,
             attemptId,
             selectedOptions: answer.selectedOptions || [],
-            textAnswer: answer.textAnswer,
+            textAnswer: answer.textAnswer || '',
             isCorrect,
             score,
-            keywordMatchPercentage: question.type === 'DESCRIPTIVE' ? 
-              (matchCount / question.keywords.length) * 100 : null
+            keywordMatchPercentage: question.type === 'DESCRIPTIVE' && question.keywords?.length > 0 ? 
+              (countMatches(answer.textAnswer, question.keywords) / question.keywords.length) * 100 : null
           }
         });
       })
     );
 
-    // Calculate total score
-    const totalScore = processedAnswers.reduce((sum, answer) => sum + (answer.score || 0), 0);
+    // Filter out null values and calculate total score
+    const validAnswers = processedAnswers.filter(a => a !== null);
+    const totalScore = validAnswers.reduce((sum, answer) => sum + (answer.score || 0), 0);
 
     // Update attempt status and score
     const updatedAttempt = await prisma.quizAttempt.update({
@@ -398,10 +421,16 @@ router.post('/:quizId/submit', authenticateUser, async (req, res) => {
 // Get attempt details with answers
 router.get('/attempt/:attemptId', authenticateUser, async (req, res) => {
   try {
+    const userId = req.user?.userId || req.user?.id;
+    
+    if (!userId) {
+      return res.status(401).json({ error: 'User not authenticated' });
+    }
+    
     const attempt = await prisma.quizAttempt.findFirst({
       where: {
         id: req.params.attemptId,
-        userId: req.user.id
+        userId: parseInt(userId)
       },
       include: {
         quiz: true,
